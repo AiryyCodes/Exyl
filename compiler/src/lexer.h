@@ -15,7 +15,8 @@ public:
 
 private:
     Token readIdentifier();
-    Token readNumber();
+    Token readNumber(bool isNegative);
+    Token readString();
 
 private:
     std::string m_Input;

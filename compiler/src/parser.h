@@ -51,6 +51,8 @@ private:
 
     std::unique_ptr<VariableDeclaration> parseVariableDecl();
     std::unique_ptr<FunctionDeclaration> parseFunctionDecl();
+    std::unique_ptr<FunctionBody> parseFunctionBody();
+    std::unique_ptr<ASTNode> parseStatement();
 
 private:
     Lexer &m_Lexer;

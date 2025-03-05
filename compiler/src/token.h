@@ -1,5 +1,6 @@
 #pragma once
 
+#include "type.h"
 #include <string>
 
 enum class TokenType
@@ -9,6 +10,7 @@ enum class TokenType
     KEYWORD,
     IDENTIFIER,
     NUMBER,
+    STRING,
     EQUALS,
     COLON,
     SEMICOLON,
@@ -37,6 +39,8 @@ static std::string tokenTypeToString(TokenType type)
         return "IDENTIFIER";
     case TokenType::NUMBER:
         return "NUMBER";
+    case TokenType::STRING:
+        return "STRING";
     case TokenType::EQUALS:
         return "EQUALS";
     case TokenType::TYPE:

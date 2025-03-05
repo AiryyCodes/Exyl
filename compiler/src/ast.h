@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 class ASTNode
@@ -22,7 +23,7 @@ public:
 
     virtual void Print() override
     {
-        printf("Literal: Name: %s Type: %s Value: %s\n", m_Name.c_str(), typeToString(m_Type).c_str(), m_Value.GetTypeString().c_str());
+        printf("Literal: Name: %s Type: %s Value: %s\n", m_Name.c_str(), typeToString(m_Type).c_str(), m_Value.GetValueString().c_str());
     }
 
     std::string m_Name;
@@ -38,7 +39,7 @@ public:
 
     virtual void Print() override
     {
-        printf("Variable Declaration: Name: %s Type: %s Value: %s Value Type: %s\n", m_Name.c_str(), m_Type.c_str(), m_Value.GetTypeString().c_str(), typeToString(m_Value.m_Type).c_str());
+        printf("Variable Declaration: Name: %s Type: %s Value: %s Value Type: %s\n", m_Name.c_str(), m_Type.c_str(), m_Value.GetValueString().c_str(), typeToString(m_Value.m_Type).c_str());
     }
 
     std::string m_Name;
@@ -61,11 +62,30 @@ public:
     std::string m_Type;
 };
 
+class FunctionBody : public ASTNode
+{
+public:
+    FunctionBody(std::vector<std::unique_ptr<ASTNode>> body)
+        : m_Body(std::move(body)) {}
+
+    virtual void Print() override
+    {
+        for (const auto &child : m_Body)
+        {
+            child->Print();
+        }
+    }
+
+    std::vector<std::unique_ptr<ASTNode>> m_Body;
+};
+
 class FunctionDeclaration : public ASTNode
 {
 public:
     FunctionDeclaration(const std::string &name, const std::string &type, std::vector<std::unique_ptr<Parameter>> parameters)
-        : m_Name(name), m_Type(type), m_Parameters(std::move(parameters)) {}
+        : m_Name(name), m_Type(type), m_Parameters(std::move(parameters)), m_Body(nullptr) {}
+    FunctionDeclaration(const std::string &name, const std::string &type, std::vector<std::unique_ptr<Parameter>> parameters, std::unique_ptr<FunctionBody> body)
+        : m_Name(name), m_Type(type), m_Parameters(std::move(parameters)), m_Body(std::move(body)) {}
 
     virtual void Print() override
     {
@@ -74,9 +94,15 @@ public:
         {
             param->Print();
         }
+
+        if (m_Body)
+        {
+            m_Body->Print();
+        }
     }
 
     std::string m_Name;
     std::string m_Type;
     std::vector<std::unique_ptr<Parameter>> m_Parameters;
+    std::unique_ptr<FunctionBody> m_Body;
 };

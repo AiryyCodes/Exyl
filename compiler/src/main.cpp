@@ -9,11 +9,14 @@
 #include <vector>
 
 const std::string TEST_SOURCE = R"(
-let myVar: int = 0;
-
-fun myFunction(param1: int, my_param: string): int
+let myVar: float = 69.69;
 
 fun add(a: int, b: int): int
+{
+}
+
+// TODO: Add checking if symbol already exists
+let myVar: int = 69;
 )";
 
 Lexer lexer(TEST_SOURCE);
