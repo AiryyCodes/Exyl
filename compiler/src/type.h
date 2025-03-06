@@ -122,7 +122,7 @@ static Type stringToType(const std::string &type)
     {
         return Type::INT8;
     }
-    else if (type == "int17")
+    else if (type == "int16")
     {
         return Type::INT16;
     }

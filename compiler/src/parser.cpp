@@ -86,7 +86,6 @@ std::unique_ptr<VariableDeclaration> Parser::parseVariableDecl()
         // Attempt to infer the type based on the value
         try
         {
-            printf("Value: %s\n", value.c_str());
             if (value.find('.') != std::string::npos)
             {
                 try
@@ -251,8 +250,6 @@ std::unique_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
 
 std::unique_ptr<FunctionBody> Parser::parseFunctionBody()
 {
-    printf("Current token: %s\n", tokenTypeToString(currentToken().type).c_str()); // Should be LBRACE
-
     // Ensure that we expect the opening '{'
     if (currentToken().type != TokenType::LBRACE)
     {

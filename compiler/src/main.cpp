@@ -1,3 +1,4 @@
+#include "analyzer.h"
 #include "lexer.h"
 #include "parser.h"
 #include "token.h"
@@ -6,17 +7,25 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <utility>
 #include <vector>
 
 const std::string TEST_SOURCE = R"(
-let myVar: float = 69.69;
+let myVar: string = "Hello, World!";
+let test_var: int = 69;
 
 fun add(a: int, b: int): int
 {
+    let test_var1 = "This is a test var 1 in add scope";
+    //let test_var1 = 69;
 }
 
-// TODO: Add checking if symbol already exists
-let myVar: int = 69;
+/*
+fun add()
+{
+
+}
+*/
 )";
 
 Lexer lexer(TEST_SOURCE);
@@ -38,6 +47,10 @@ int main(int argc, char *argv[])
         node->Print();
     }
 
+    Analyzer analyzer(std::move(ast));
+    analyzer.Analyze();
+
+    /*
     std::vector<Token> tokens;
     Lexer newLexer(TEST_SOURCE);
     while (newLexer.HasNextToken())
@@ -46,6 +59,7 @@ int main(int argc, char *argv[])
     }
 
     printTokens(tokens);
+    */
 
     return EXIT_SUCCESS;
 }
