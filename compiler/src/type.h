@@ -10,6 +10,7 @@
 enum class Type
 {
     UNKNOWN,
+    VOID,
     INT8,
     INT16,
     INT32,
@@ -78,7 +79,7 @@ static Value getValueFromString(const std::string &string, Type type)
             if (parsedValue < limitMin || parsedValue > limitMax)
             {
                 printf("Error: Value '%s' exceeds the allowed range for type '%s'. Value must be between %lld and %lld.\n",
-                       string.c_str(), typeToString(type).c_str(), static_cast<long long>(limitMin), static_cast<long long>(limitMax));
+                       string.c_str(), typeToString(type).c_str(), static_cast<long long int>(limitMin), static_cast<long long int>(limitMax));
                 exit(1);
             }
 
@@ -95,7 +96,7 @@ static Value getValueFromString(const std::string &string, Type type)
             if (parsedValue < limitMin || parsedValue > limitMax)
             {
                 printf("Error: Value '%s' exceeds the allowed range for type '%s'. Value must be between %lld and %lld.\n",
-                       string.c_str(), typeToString(type).c_str(), limitMin, limitMax);
+                       string.c_str(), typeToString(type).c_str(), static_cast<long long int>(limitMin), static_cast<long long int>(limitMax));
                 exit(1);
             }
 
@@ -118,7 +119,11 @@ static Value getValueFromString(const std::string &string, Type type)
 
 static Type stringToType(const std::string &type)
 {
-    if (type == "int8")
+    if (type == "void")
+    {
+        return Type::VOID;
+    }
+    else if (type == "int8")
     {
         return Type::INT8;
     }
@@ -152,6 +157,8 @@ static std::string typeToString(Type type)
 {
     switch (type)
     {
+    case Type::VOID:
+        return "VOID";
     case Type::INT8:
         return "INT8";
     case Type::INT16:

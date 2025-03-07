@@ -14,7 +14,7 @@ public:
     Parser(Lexer &lexer)
         : m_Lexer(lexer), m_CurrentToken(lexer.NextToken()) {}
 
-    std::vector<std::unique_ptr<ASTNode>> Parse();
+    std::vector<std::shared_ptr<ASTNode>> Parse();
 
 private:
     Token &currentToken()
@@ -49,10 +49,10 @@ private:
         }
     }
 
-    std::unique_ptr<VariableDeclaration> parseVariableDecl();
-    std::unique_ptr<FunctionDeclaration> parseFunctionDecl();
+    std::shared_ptr<VariableDeclaration> parseVariableDecl();
+    std::shared_ptr<FunctionDeclaration> parseFunctionDecl();
     std::unique_ptr<FunctionBody> parseFunctionBody();
-    std::unique_ptr<ASTNode> parseStatement();
+    std::shared_ptr<ASTNode> parseStatement();
 
 private:
     Lexer &m_Lexer;

@@ -9,7 +9,7 @@
 class Analyzer
 {
 public:
-    Analyzer(std::vector<std::unique_ptr<ASTNode>> ast) : ast(std::move(ast)) {}
+    Analyzer(std::vector<std::shared_ptr<ASTNode>> ast) : ast(std::move(ast)) {}
 
     void Analyze();
 
@@ -24,5 +24,5 @@ private:
 private:
     ScopeManager scopeManager;
 
-    std::vector<std::unique_ptr<ASTNode>> ast;
+    std::vector<std::shared_ptr<ASTNode>> ast;
 };

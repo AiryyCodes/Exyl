@@ -65,8 +65,8 @@ public:
 class FunctionBody : public ASTNode
 {
 public:
-    FunctionBody(std::vector<std::unique_ptr<ASTNode>> body)
-        : m_Body(std::move(body)) {}
+    FunctionBody(const std::vector<std::shared_ptr<ASTNode>> &body)
+        : m_Body(body) {}
 
     virtual void Print() override
     {
@@ -76,7 +76,7 @@ public:
         }
     }
 
-    std::vector<std::unique_ptr<ASTNode>> m_Body;
+    std::vector<std::shared_ptr<ASTNode>> m_Body;
 };
 
 class FunctionDeclaration : public ASTNode

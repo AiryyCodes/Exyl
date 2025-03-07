@@ -1,20 +1,23 @@
-# shell.nix for your CMake, GLFW, OpenGL project
+
 { pkgs ? import <nixpkgs> {} }:
 
 pkgs.mkShell rec {
-  # Name of the development environment
   name = "my-cmake-glfw-opengl-shell";
 
-  # Dependencies for building and running the project
-  buildInputs = with pkgs;[
+  buildInputs = with pkgs; [
     cmake
     clang-tools
     clang
+    llvmPackages_16.libllvm
+    llvmPackages_16.libcxxClang
   ];
 
-  # Environment variables for the shell (if needed)
   shellHook = ''
     echo "Welcome to the development environment for CMake, GLFW, and OpenGL!"
-	export LIBCLANG_PATH=${pkgs.libclang.lib}/lib
+    export LIBCLANG_PATH=${pkgs.libclang.lib}/lib
+    export PKG_CONFIG_PATH="${pkgs.glib.dev}/lib/pkgconfig:${pkgs.openssl.dev}/lib/pkgconfig"
+    # export LLVM_DIR="${pkgs.llvmPackages.libllvm}/lib/cmake/llvm"  # Ensure LLVM_DIR is set
+    # export LLVM_CONFIG=$(which llvm-config)
   '';
 }
+

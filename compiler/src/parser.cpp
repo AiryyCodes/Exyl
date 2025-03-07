@@ -6,9 +6,9 @@
 #include <memory>
 #include <vector>
 
-std::vector<std::unique_ptr<ASTNode>> Parser::Parse()
+std::vector<std::shared_ptr<ASTNode>> Parser::Parse()
 {
-    std::vector<std::unique_ptr<ASTNode>> nodes;
+    std::vector<std::shared_ptr<ASTNode>> nodes;
 
     while (currentToken().type != TokenType::TK_EOF)
     {
@@ -44,7 +44,7 @@ std::vector<std::unique_ptr<ASTNode>> Parser::Parse()
     return nodes;
 }
 
-std::unique_ptr<VariableDeclaration> Parser::parseVariableDecl()
+std::shared_ptr<VariableDeclaration> Parser::parseVariableDecl()
 {
     expect(TokenType::KEYWORD, "let");
 
@@ -152,10 +152,10 @@ std::unique_ptr<VariableDeclaration> Parser::parseVariableDecl()
     nextToken();
 
     // TODO: If value is empty the value type is gonna be string
-    return std::make_unique<VariableDeclaration>(varName, type, varValue);
+    return std::make_shared<VariableDeclaration>(varName, type, varValue);
 }
 
-std::unique_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
+std::shared_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
 {
     expect(TokenType::KEYWORD, "fun");
 
@@ -213,11 +213,14 @@ std::unique_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
 
     if (type.empty())
     {
-        // Attempt to infer the type based on the return value
+        type = "void";
     }
 
     // Create the appropriate Value based on the inferred or provided type
-    if (type == "int8")
+    if (type == "void")
+    {
+    }
+    else if (type == "int8")
     {
     }
     else if (type == "int16")
@@ -245,7 +248,7 @@ std::unique_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
 
     std::unique_ptr<FunctionBody> body = parseFunctionBody();
 
-    return std::make_unique<FunctionDeclaration>(name, type, std::move(parameters), std::move(body));
+    return std::make_shared<FunctionDeclaration>(name, type, std::move(parameters), std::move(body));
 }
 
 std::unique_ptr<FunctionBody> Parser::parseFunctionBody()
@@ -259,7 +262,7 @@ std::unique_ptr<FunctionBody> Parser::parseFunctionBody()
 
     nextToken(); // Consume '{'
 
-    std::vector<std::unique_ptr<ASTNode>> statements;
+    std::vector<std::shared_ptr<ASTNode>> statements;
 
     // Consume statements until we reach the closing '}'
     while (peekToken().type != TokenType::RBRACE)
@@ -282,10 +285,10 @@ std::unique_ptr<FunctionBody> Parser::parseFunctionBody()
 
     nextToken(); // Consume '}'
 
-    return std::make_unique<FunctionBody>(std::move(statements));
+    return std::make_unique<FunctionBody>(statements);
 }
 
-std::unique_ptr<ASTNode> Parser::parseStatement()
+std::shared_ptr<ASTNode> Parser::parseStatement()
 {
     Token token = currentToken();
     // printf("Current token in Parser::parseStatement: %s (%s)\n", token.value.c_str(), tokenTypeToString(token.type).c_str());
