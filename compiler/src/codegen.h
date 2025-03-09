@@ -181,7 +181,7 @@ private:
             using T = std::decay_t<decltype(val)>;
             if constexpr (std::is_same_v<T, std::string>)
                 return llvm::ConstantDataArray::getString(context, val, true);
-            else if constexpr (std::is_same_v<T, int32_t>
+            else if constexpr (std::is_same_v<T, int32_t>)
                 return llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), val, true);
             else
              return nullptr; }, value.m_Value);
