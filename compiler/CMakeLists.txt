@@ -14,7 +14,6 @@ add_definitions(${LLVM_DEFINITIONS})
 
 add_executable(${PROJECT_NAME} ${COMPILER_SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE "src/")
-target_link_libraries(${PROJECT_NAME} PRIVATE ExylStd)
 
 llvm_map_components_to_libnames(LLVM_LIBS
     core

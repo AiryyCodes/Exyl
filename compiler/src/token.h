@@ -1,7 +1,9 @@
 #pragma once
 
 #include "type.h"
+#include <cstdio>
 #include <string>
+#include <vector>
 
 enum class TokenType
 {
@@ -63,5 +65,13 @@ static std::string tokenTypeToString(TokenType type)
         return "COMMA";
     default:
         return "UNKNOWN";
+    }
+}
+
+static void printTokens(const std::vector<Token> tokens)
+{
+    for (const auto &token : tokens)
+    {
+        printf("Token: Type: %s Value: %s Position: %i\n", tokenTypeToString(token.type).c_str(), token.value.c_str(), token.position);
     }
 }

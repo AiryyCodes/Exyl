@@ -48,7 +48,7 @@ public:
             else if constexpr (std::is_same_v<T, bool>)
                 return val ? "true" : "false";
             else if constexpr (std::is_same_v<T, int8_t> || std::is_same_v<T, int16_t> || std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t>)
-                return std::to_string(static_cast<int64_t>(val));  // Cast to a type supported by to_string
+                return std::to_string(static_cast<int64_t>(val));
             else if constexpr (std::is_same_v<T, float>)
                 return std::to_string(static_cast<float>(val));
             else
@@ -107,8 +107,6 @@ static Value getValueFromString(const std::string &string, Type type)
             printf("Error: Unknown type '%s' for value '%s'.\n", typeToString(type).c_str(), string.c_str());
             exit(1);
         }
-
-        // return Value(static_cast<typename std::make_signed<T>::type>(parsedValue)); // Ensure signed type
     }
     catch (const std::exception &)
     {

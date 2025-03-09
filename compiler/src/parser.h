@@ -53,6 +53,9 @@ private:
     std::shared_ptr<FunctionDeclaration> parseFunctionDecl();
     std::unique_ptr<FunctionBody> parseFunctionBody();
     std::shared_ptr<ASTNode> parseStatement();
+    std::shared_ptr<ExternalStatement> parseExternStatement();
+    std::shared_ptr<ASTNode> parseExpression();
+    std::shared_ptr<FunctionCall> parseFuncCall(const std::string &callee);
 
 private:
     Lexer &m_Lexer;

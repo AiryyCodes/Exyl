@@ -1,6 +1,7 @@
 #include "parser.h"
 #include "ast.h"
 #include "token.h"
+#include "type.h"
 
 #include <cstdio>
 #include <memory>
@@ -22,19 +23,30 @@ std::vector<std::shared_ptr<ASTNode>> Parser::Parse()
             {
                 nodes.push_back(parseFunctionDecl());
             }
+            else if (currentToken().value == "extern")
+            {
+                nodes.push_back(parseExternStatement());
+            }
             else
             {
                 printf("Syntax Error: Unexpected keyword %s\n", currentToken().value.c_str());
                 exit(1);
             }
         }
-        else if (currentToken().type != TokenType::KEYWORD)
+        else
         {
-            printf("Syntax Error: Unexpected token %s\n", currentToken().value.c_str());
-            exit(1);
+            auto expr = parseExpression();
+            if (expr)
+            {
+                nodes.push_back(expr);
+            }
+            else
+            {
+                printf("Syntax Error: Unexpected token %s\n", currentToken().value.c_str());
+                exit(1);
+            }
         }
 
-        // Move to the next token
         if (peekToken().type == TokenType::UNKNOWN)
         {
             break;
@@ -148,10 +160,8 @@ std::shared_ptr<VariableDeclaration> Parser::parseVariableDecl()
 
     expect(TokenType::SEMICOLON);
 
-    // If i dont have this here the token in the while loop will never reach TK_EOF
     nextToken();
 
-    // TODO: If value is empty the value type is gonna be string
     return std::make_shared<VariableDeclaration>(varName, type, varValue);
 }
 
@@ -167,8 +177,6 @@ std::shared_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
     nextToken();
 
     expect(TokenType::LPAREN);
-
-    // nextToken();
 
     std::vector<std::unique_ptr<Parameter>> parameters;
 
@@ -298,6 +306,11 @@ std::shared_ptr<ASTNode> Parser::parseStatement()
         return parseVariableDecl();
     }
 
+    if (token.type == TokenType::IDENTIFIER)
+    {
+        return parseExpression();
+    }
+
     if (token.type == TokenType::RBRACE || token.type == TokenType::TK_EOF)
     {
         return nullptr; // End of block
@@ -305,4 +318,86 @@ std::shared_ptr<ASTNode> Parser::parseStatement()
 
     printf("Error: Unexpected token in statement: %s\n", token.value.c_str());
     exit(1); // Unexpected error
+}
+
+std::shared_ptr<ExternalStatement> Parser::parseExternStatement()
+{
+    expect(TokenType::KEYWORD, "extern");
+
+    Token tokenName = nextToken();
+
+    expect(TokenType::IDENTIFIER);
+
+    // Should be ':'
+    nextToken();
+
+    // Should be the type
+    Token tokenType = nextToken();
+
+    expect(TokenType::TYPE);
+
+    nextToken();
+
+    expect(TokenType::SEMICOLON);
+
+    nextToken();
+
+    return std::make_shared<ExternalStatement>(tokenName.value, tokenType.value);
+}
+
+std::shared_ptr<ASTNode> Parser::parseExpression()
+{
+    if (currentToken().type == TokenType::IDENTIFIER)
+    {
+        Token tokenName = currentToken();
+        printf("Identifier Name: %s\n", tokenName.value.c_str());
+        nextToken();
+
+        if (currentToken().type == TokenType::LPAREN)
+        {
+            return parseFuncCall(tokenName.value);
+        }
+
+        return std::make_shared<VariableExpression>(tokenName.value);
+    }
+
+    if (currentToken().type == TokenType::STRING)
+    {
+        std::string valueStr = currentToken().value;
+        nextToken();
+        printf("Current token: %s\n", valueStr.c_str());
+        Value value(valueStr);
+        return std::make_shared<Literal>(valueStr, Type::STRING, value);
+    }
+
+    printf("Unexpected token in expression: %s\n", currentToken().value.c_str());
+    exit(1);
+}
+
+std::shared_ptr<FunctionCall> Parser::parseFuncCall(const std::string &callee)
+{
+    expect(TokenType::LPAREN, "(");
+
+    // Should be '('
+    nextToken();
+
+    std::vector<std::shared_ptr<ASTNode>> args;
+    if (currentToken().type != TokenType::RPAREN)
+    {
+        while (true)
+        {
+            args.push_back(parseExpression());
+
+            if (currentToken().type == TokenType::RPAREN)
+                break;
+
+            expect(TokenType::COMMA, ",");
+            nextToken();
+        }
+    }
+
+    nextToken();
+    nextToken();
+
+    return std::make_shared<FunctionCall>(callee, args);
 }

@@ -15,34 +15,35 @@ Token Lexer::NextToken()
         return {TokenType::TK_EOF, "EOF", m_CurrentPos};
     }
 
+    // Skip singleline comments
     if (m_CurrentPos + 1 < m_Input.size() && m_Input[m_CurrentPos] == '/' && m_Input[m_CurrentPos + 1] == '/')
     {
-        // Skip the rest of the line
+        // Skip until newline terminator
         while (m_CurrentPos < m_Input.size() && m_Input[m_CurrentPos] != '\n')
         {
             m_CurrentPos++;
         }
-        return NextToken(); // Continue scanning the next token
+        return NextToken();
     }
 
+    // Skip multiline comments
     if (m_CurrentPos + 1 < m_Input.size() && m_Input[m_CurrentPos] == '/' && m_Input[m_CurrentPos + 1] == '*')
     {
         // Skip over the opening "/*"
         m_CurrentPos += 2;
 
-        // Skip until we find the closing "*/"
+        // Skip until "*/" is found
         while (m_CurrentPos + 1 < m_Input.size() && !(m_Input[m_CurrentPos] == '*' && m_Input[m_CurrentPos + 1] == '/'))
         {
             m_CurrentPos++;
         }
 
-        // If we found "*/", move past it
+        // If "*/" is found, move past it
         if (m_CurrentPos + 1 < m_Input.size())
         {
             m_CurrentPos += 2;
         }
 
-        // Continue scanning the next token
         return NextToken();
     }
 
@@ -148,12 +149,13 @@ Token Lexer::readIdentifier()
         result += m_Input[m_CurrentPos++];
     }
 
-    // printf("Identifier result: %s\n", result.c_str());
-
     if (result == "let")
         return {TokenType::KEYWORD, result, startPos};
     if (result == "fun")
         return {TokenType::KEYWORD, result, startPos};
+    if (result == "extern")
+        return {TokenType::KEYWORD, result, startPos};
+
     return {TokenType::IDENTIFIER, result, startPos};
 }
 

@@ -34,7 +34,6 @@ void Analyzer::analyzeVariableDeclaration(VariableDeclaration *varDecl)
     {
         printf("Variable '%s' is already defined in this scope.\n", varDecl->m_Name.c_str());
         exit(1);
-        // throw std::runtime_error("Variable '" + varDecl->m_Name + "' is already defined in this scope.");
     }
 
     std::string typeLowercase;
@@ -67,6 +66,7 @@ void Analyzer::analyzeFunctionDeclaration(FunctionDeclaration *funcDecl)
         funcSymbol.parameters.emplace_back(param->m_Name, param->m_Type);
     }
 
+    // TODO: For now only allow top-level functions
     // Register the function in the global scope
     if (!scopeManager.defineFunc(funcDecl->m_Name, funcSymbol))
     {

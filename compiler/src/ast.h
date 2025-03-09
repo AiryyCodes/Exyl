@@ -106,3 +106,52 @@ public:
     std::vector<std::unique_ptr<Parameter>> m_Parameters;
     std::unique_ptr<FunctionBody> m_Body;
 };
+
+class FunctionCall : public ASTNode
+{
+public:
+    FunctionCall(const std::string &callee, std::vector<std::shared_ptr<ASTNode>> args)
+        : callee(callee), args(std::move(args)) {}
+
+    virtual void Print() override
+    {
+        printf("Function Call: Callee: %s\n", callee.c_str());
+
+        for (const auto &arg : args)
+        {
+            arg->Print();
+        }
+    }
+
+    std::string callee;
+    std::vector<std::shared_ptr<ASTNode>> args;
+};
+
+class ExternalStatement : public ASTNode
+{
+public:
+    ExternalStatement(const std::string &name, const std::string &type)
+        : name(name), type(type) {}
+
+    virtual void Print() override
+    {
+        printf("External Statement: Name: %s Type: %s\n", name.c_str(), type.c_str());
+    }
+
+    std::string name;
+    std::string type;
+};
+
+class VariableExpression : public ASTNode
+{
+public:
+    VariableExpression(const std::string &name)
+        : name(name) {}
+
+    virtual void Print() override
+    {
+        printf("Variable Expression: Name: %s\n", name.c_str());
+    }
+
+    std::string name;
+};
