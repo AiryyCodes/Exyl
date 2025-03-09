@@ -1,9 +1,14 @@
 #pragma once
 
 #include "ast.h"
+#include "type.h"
 
 #include <cstdint>
 #include <cstdio>
+#include <llvm-18/llvm/ADT/SmallString.h>
+#include <llvm-18/llvm/IR/GlobalValue.h>
+#include <llvm-18/llvm/Support/Casting.h>
+#include <llvm-18/llvm/Support/MD5.h>
 #include <llvm/IR/Constant.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
@@ -34,7 +39,7 @@ public:
 
     void generate(std::vector<std::shared_ptr<ASTNode>> &nodes)
     {
-        using namespace llvm;
+        // using namespace llvm;
 
         for (const auto &node : nodes)
         {
@@ -60,29 +65,45 @@ public:
                 if (funcDecl->m_Name == "main")
                 {
                     std::vector<llvm::Type *> mainArgs;
-                    FunctionType *mainType = FunctionType::get(llvm::Type::getInt32Ty(context), mainArgs, false);
+                    llvm::FunctionType *mainType = llvm::FunctionType::get(llvm::Type::getInt32Ty(context), mainArgs, false);
 
-                    Function *mainFunc = Function::Create(mainType, Function::ExternalLinkage, "main", module);
+                    llvm::Function *mainFunc = llvm::Function::Create(mainType, llvm::Function::ExternalLinkage, "main", module);
 
-                    BasicBlock *entry = BasicBlock::Create(context, "entry", mainFunc);
+                    llvm::BasicBlock *entry = llvm::BasicBlock::Create(context, "entry", mainFunc);
                     builder.SetInsertPoint(entry);
 
                     for (const auto &child : funcDecl->m_Body->m_Body)
                     {
                         if (auto callStmt = dynamic_cast<FunctionCall *>(child.get()))
                         {
-                            Function *func = module->getFunction(callStmt->callee);
+                            llvm::Function *func = module->getFunction(callStmt->callee);
 
                             std::vector<llvm::Value *> args;
                             for (const auto &arg : callStmt->args)
                             {
                                 if (auto literal = dynamic_cast<Literal *>(arg.get()))
                                 {
-                                    args.push_back(getLLVMValue(literal->m_Value));
+                                    // TODO: Create a function to make creating variables easier
+                                    // args.push_back(getLLVMValue(literal->m_Value));
+                                    llvm::Constant *value = getLLVMValue(literal->m_Value);
+
+                                    llvm::MD5 md5;
+                                    md5.update(literal->m_Value.GetValueString() + literal->m_Name);
+                                    llvm::MD5::MD5Result result;
+                                    md5.final(result);
+
+                                    llvm::SmallString<32> uniqueName;
+                                    for (auto byte : result)
+                                    {
+                                        llvm::raw_svector_ostream(uniqueName) << llvm::format_hex(byte, 2);
+                                    }
+
+                                    llvm::GlobalVariable *globalStr = new llvm::GlobalVariable(*module, value->getType(), true, llvm::GlobalValue::PrivateLinkage, value, uniqueName.str());
+                                    args.push_back(globalStr);
                                 }
                                 else if (auto variable = dynamic_cast<VariableExpression *>(arg.get()))
                                 {
-                                    GlobalVariable *globalVar = module->getGlobalVariable(variable->name);
+                                    llvm::GlobalVariable *globalVar = module->getGlobalVariable(variable->name);
                                     args.push_back(globalVar);
                                 }
                             }
@@ -91,16 +112,16 @@ public:
                         }
                     }
 
-                    builder.CreateRet(ConstantInt::get(llvm::Type::getInt32Ty(context), 0));
+                    builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0));
                 }
             }
-            else if (auto externStmt = dynamic_cast<ExternalStatement *>(node.get()))
+            else if (auto externStmt = dynamic_cast<ExternStatement *>(node.get()))
             {
-                FunctionType *funcType = FunctionType::get(getLLVMType(externStmt->type), true);
+                llvm::FunctionType *funcType = llvm::FunctionType::get(getLLVMType(externStmt->type), true);
 
-                Function *func = Function::Create(
+                llvm::Function *func = llvm::Function::Create(
                     funcType,
-                    Function::ExternalLinkage,
+                    llvm::Function::ExternalLinkage,
                     externStmt->name,
                     module);
             }

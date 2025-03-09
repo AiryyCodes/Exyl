@@ -320,13 +320,40 @@ std::shared_ptr<ASTNode> Parser::parseStatement()
     exit(1); // Unexpected error
 }
 
-std::shared_ptr<ExternalStatement> Parser::parseExternStatement()
+std::shared_ptr<ExternStatement> Parser::parseExternStatement()
 {
     expect(TokenType::KEYWORD, "extern");
 
     Token tokenName = nextToken();
 
     expect(TokenType::IDENTIFIER);
+
+    printf("Next token: %s\n", peekToken().value.c_str());
+
+    std::vector<std::string> parameters;
+    if (peekToken().type == TokenType::LPAREN)
+    {
+        nextToken();
+
+        if (peekToken().type != TokenType::RPAREN)
+        {
+            do
+            {
+                Token paramToken = nextToken();
+                expect(TokenType::IDENTIFIER);
+                std::string paramName = paramToken.value;
+
+                if (peekToken().type == TokenType::COMMA)
+                {
+                    nextToken();
+                }
+
+                parameters.push_back(paramName);
+            } while (peekToken().type != TokenType::RPAREN);
+
+            nextToken();
+        }
+    }
 
     // Should be ':'
     nextToken();
@@ -342,7 +369,7 @@ std::shared_ptr<ExternalStatement> Parser::parseExternStatement()
 
     nextToken();
 
-    return std::make_shared<ExternalStatement>(tokenName.value, tokenType.value);
+    return std::make_shared<ExternStatement>(tokenName.value, tokenType.value);
 }
 
 std::shared_ptr<ASTNode> Parser::parseExpression()

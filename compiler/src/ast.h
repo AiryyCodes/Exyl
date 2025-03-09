@@ -127,19 +127,24 @@ public:
     std::vector<std::shared_ptr<ASTNode>> args;
 };
 
-class ExternalStatement : public ASTNode
+class ExternStatement : public ASTNode
 {
 public:
-    ExternalStatement(const std::string &name, const std::string &type)
-        : name(name), type(type) {}
+    ExternStatement(const std::string &name, const std::string &type, const std::vector<std::string> &parameters = {})
+        : name(name), type(type), parameters(parameters) {}
 
     virtual void Print() override
     {
-        printf("External Statement: Name: %s Type: %s\n", name.c_str(), type.c_str());
+        printf("Extern Statement: Name: %s Type: %s\n", name.c_str(), type.c_str());
+        for (const auto &param : parameters)
+        {
+            printf("Extern Param: Type: %s\n", param.c_str());
+        }
     }
 
     std::string name;
     std::string type;
+    std::vector<std::string> parameters;
 };
 
 class VariableExpression : public ASTNode

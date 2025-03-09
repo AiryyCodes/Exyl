@@ -27,16 +27,18 @@
 #include <llvm/Support/CodeGen.h>
 #include <llvm/IR/Value.h>
 
-const std::string TEST_SOURCE = R"(
-let test_var1 = "Hello, Exyl!\n";
-//let test_var: int = 69;
-let test_var2 = "Hello, Main!";
+// TODO: Fix call statements not checking properly for ending semicolon
 
-extern printf: void;
+const std::string TEST_SOURCE = R"(
+let test_var0: int = 69;
+let test_var1 = "Hello, Exyl!\n";
+let test_var2 = "Hello, Main!\n";
+
+extern printf(string): void;
 
 fun main()
 {
-    printf(test_var2);
+    printf("This is a string literal\n");
 }
 )";
 
