@@ -224,8 +224,9 @@ std::shared_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
         type = "void";
     }
 
+    // TODO: Make this more modular
     // Create the appropriate Value based on the inferred or provided type
-    if (type == "void")
+    if (type == "void" || type.empty())
     {
     }
     else if (type == "int8")
@@ -240,7 +241,7 @@ std::shared_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
     else if (type == "int64")
     {
     }
-    else if (type == "string" || type.empty())
+    else if (type == "string")
     {
     }
     else if (type == "float")

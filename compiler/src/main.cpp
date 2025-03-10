@@ -34,7 +34,7 @@ let test_var2 = "Hello, Main!\n";
 
 extern printf(string): void;
 
-fun main()
+fun main(): void
 {
     printf("This is a string literal\n");
 }

@@ -27,58 +27,54 @@ void LLVMCodeGenVisitor::Visit(VariableDeclaration &node)
 
 void LLVMCodeGenVisitor::Visit(FunctionDeclaration &node)
 {
-    // TODO: Parse the function body ast and generate ir from it
-    if (node.name == "main")
+    // TODO: Fill the vector the correct arguments
+    std::vector<llvm::Type *> args;
+    llvm::FunctionType *funcType = llvm::FunctionType::get(getLLVMType(node.type), args, false);
+
+    llvm::Function *func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, node.name, module);
+
+    llvm::BasicBlock *entry = llvm::BasicBlock::Create(context, "entry", func);
+    builder.SetInsertPoint(entry);
+
+    for (const auto &child : node.body->body)
     {
-        std::vector<llvm::Type *> mainArgs;
-        llvm::FunctionType *mainType = llvm::FunctionType::get(llvm::Type::getInt32Ty(context), mainArgs, false);
-
-        llvm::Function *mainFunc = llvm::Function::Create(mainType, llvm::Function::ExternalLinkage, "main", module);
-
-        llvm::BasicBlock *entry = llvm::BasicBlock::Create(context, "entry", mainFunc);
-        builder.SetInsertPoint(entry);
-
-        for (const auto &child : node.body->body)
+        if (auto callStmt = dynamic_cast<FunctionCall *>(child.get()))
         {
-            if (auto callStmt = dynamic_cast<FunctionCall *>(child.get()))
+            std::vector<llvm::Value *> calledArgs;
+            for (const auto &arg : callStmt->args)
             {
-                llvm::Function *func = module.getFunction(callStmt->callee);
-
-                std::vector<llvm::Value *> args;
-                for (const auto &arg : callStmt->args)
+                if (auto literal = dynamic_cast<Literal *>(arg.get()))
                 {
-                    if (auto literal = dynamic_cast<Literal *>(arg.get()))
+                    // TODO: Create a function to make creating variables easier
+                    llvm::Constant *value = getLLVMValue(literal->value);
+
+                    llvm::MD5 md5;
+                    md5.update(literal->value.GetValueString() + literal->name);
+                    llvm::MD5::MD5Result result;
+                    md5.final(result);
+
+                    llvm::SmallString<32> uniqueName;
+                    for (auto byte : result)
                     {
-                        // TODO: Create a function to make creating variables easier
-                        llvm::Constant *value = getLLVMValue(literal->value);
-
-                        llvm::MD5 md5;
-                        md5.update(literal->value.GetValueString() + literal->name);
-                        llvm::MD5::MD5Result result;
-                        md5.final(result);
-
-                        llvm::SmallString<32> uniqueName;
-                        for (auto byte : result)
-                        {
-                            llvm::raw_svector_ostream(uniqueName) << llvm::format_hex(byte, 2);
-                        }
-
-                        llvm::GlobalVariable *globalStr = new llvm::GlobalVariable(module, value->getType(), true, llvm::GlobalValue::PrivateLinkage, value, uniqueName.str());
-                        args.push_back(globalStr);
+                        llvm::raw_svector_ostream(uniqueName) << llvm::format_hex(byte, 2);
                     }
-                    else if (auto variable = dynamic_cast<VariableExpression *>(arg.get()))
-                    {
-                        llvm::GlobalVariable *globalVar = module.getGlobalVariable(variable->name);
-                        args.push_back(globalVar);
-                    }
+
+                    llvm::GlobalVariable *globalStr = new llvm::GlobalVariable(module, value->getType(), true, llvm::GlobalValue::PrivateLinkage, value, uniqueName.str());
+                    calledArgs.push_back(globalStr);
                 }
-
-                builder.CreateCall(func, args);
+                else if (auto variable = dynamic_cast<VariableExpression *>(arg.get()))
+                {
+                    llvm::GlobalVariable *globalVar = module.getGlobalVariable(variable->name);
+                    calledArgs.push_back(globalVar);
+                }
             }
-        }
 
-        builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0));
+            llvm::Function *calledFunc = module.getFunction(callStmt->callee);
+            builder.CreateCall(calledFunc, calledArgs);
+        }
     }
+
+    builder.CreateRetVoid();
 }
 
 void LLVMCodeGenVisitor::Visit(ExternStatement &node)
