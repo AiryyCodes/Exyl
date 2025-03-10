@@ -27,8 +27,6 @@
 #include <llvm/Support/CodeGen.h>
 #include <llvm/IR/Value.h>
 
-// TODO: Fix call statements not checking properly for ending semicolon
-
 const std::string TEST_SOURCE = R"(
 let test_var0: int = 69;
 let test_var1 = "Hello, Exyl!\n";
