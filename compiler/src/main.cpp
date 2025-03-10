@@ -1,7 +1,7 @@
 #include "analyzer.h"
 #include "lexer.h"
 #include "parser.h"
-#include "codegen.h"
+#include "codegen/codegen.h"
 
 #include <cctype>
 #include <cstdio>
@@ -59,8 +59,8 @@ int main(int argc, char *argv[])
     analyzer.Analyze();
 
     CodeGen codegen("exyl");
-    codegen.generate(ast);
-    codegen.compile("output.o");
+    codegen.Generate(ast);
+    codegen.Compile("output.o");
 
     /*
     std::vector<Token> tokens;

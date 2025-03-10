@@ -5,57 +5,57 @@
 
 Token Lexer::NextToken()
 {
-    while (m_CurrentPos < m_Input.size() && std::isspace(m_Input[m_CurrentPos]))
+    while (currentPos < input.size() && std::isspace(input[currentPos]))
     {
-        m_CurrentPos++;
+        currentPos++;
     }
 
-    if (m_CurrentPos == m_Input.size())
+    if (currentPos == input.size())
     {
-        return {TokenType::TK_EOF, "EOF", m_CurrentPos};
+        return {TokenType::TK_EOF, "EOF", currentPos};
     }
 
     // Skip singleline comments
-    if (m_CurrentPos + 1 < m_Input.size() && m_Input[m_CurrentPos] == '/' && m_Input[m_CurrentPos + 1] == '/')
+    if (currentPos + 1 < input.size() && input[currentPos] == '/' && input[currentPos + 1] == '/')
     {
         // Skip until newline terminator
-        while (m_CurrentPos < m_Input.size() && m_Input[m_CurrentPos] != '\n')
+        while (currentPos < input.size() && input[currentPos] != '\n')
         {
-            m_CurrentPos++;
+            currentPos++;
         }
         return NextToken();
     }
 
     // Skip multiline comments
-    if (m_CurrentPos + 1 < m_Input.size() && m_Input[m_CurrentPos] == '/' && m_Input[m_CurrentPos + 1] == '*')
+    if (currentPos + 1 < input.size() && input[currentPos] == '/' && input[currentPos + 1] == '*')
     {
         // Skip over the opening "/*"
-        m_CurrentPos += 2;
+        currentPos += 2;
 
         // Skip until "*/" is found
-        while (m_CurrentPos + 1 < m_Input.size() && !(m_Input[m_CurrentPos] == '*' && m_Input[m_CurrentPos + 1] == '/'))
+        while (currentPos + 1 < input.size() && !(input[currentPos] == '*' && input[currentPos + 1] == '/'))
         {
-            m_CurrentPos++;
+            currentPos++;
         }
 
         // If "*/" is found, move past it
-        if (m_CurrentPos + 1 < m_Input.size())
+        if (currentPos + 1 < input.size())
         {
-            m_CurrentPos += 2;
+            currentPos += 2;
         }
 
         return NextToken();
     }
 
-    if (m_ReturnTypeNext)
+    if (returnTypeNext)
     {
         Token type = readIdentifier();
 
-        m_ReturnTypeNext = false;
-        return {TokenType::TYPE, type.value, m_CurrentPos};
+        returnTypeNext = false;
+        return {TokenType::TYPE, type.value, currentPos};
     }
 
-    char currentChar = m_Input[m_CurrentPos];
+    char currentChar = input[currentPos];
 
     if (std::isalpha(currentChar))
     {
@@ -75,78 +75,79 @@ Token Lexer::NextToken()
         return string;
     }
 
-    if (currentChar == '-' && std::isdigit(m_Input[m_CurrentPos + 1]))
+    if (currentChar == '-' && std::isdigit(input[currentPos + 1]))
     {
         Token negativeNumber = readNumber(true);
         return negativeNumber;
     }
 
     if (currentChar == '=')
+
     {
-        m_CurrentPos++;
-        return {TokenType::EQUALS, "=", m_CurrentPos};
+        currentPos++;
+        return {TokenType::EQUALS, "=", currentPos};
     }
 
     if (currentChar == ';')
     {
-        m_CurrentPos++;
-        return {TokenType::SEMICOLON, ";", m_CurrentPos};
+        currentPos++;
+        return {TokenType::SEMICOLON, ";", currentPos};
     }
 
     if (currentChar == ':')
     {
-        m_CurrentPos++;
-        m_ReturnTypeNext = true;
+        currentPos++;
+        returnTypeNext = true;
 
-        return {TokenType::COLON, ":", m_CurrentPos};
+        return {TokenType::COLON, ":", currentPos};
     }
 
     if (currentChar == '(')
     {
-        m_CurrentPos++;
-        return {TokenType::LPAREN, "(", m_CurrentPos};
+        currentPos++;
+        return {TokenType::LPAREN, "(", currentPos};
     }
 
     if (currentChar == ')')
     {
-        m_CurrentPos++;
-        return {TokenType::RPAREN, ")", m_CurrentPos};
+        currentPos++;
+        return {TokenType::RPAREN, ")", currentPos};
     }
 
     if (currentChar == ',')
     {
-        m_CurrentPos++;
-        return {TokenType::COMMA, ",", m_CurrentPos};
+        currentPos++;
+        return {TokenType::COMMA, ",", currentPos};
     }
 
     if (currentChar == '{')
     {
-        m_CurrentPos++;
-        return {TokenType::LBRACE, "{", m_CurrentPos};
+        currentPos++;
+        return {TokenType::LBRACE, "{", currentPos};
     }
 
     if (currentChar == '}')
     {
-        m_CurrentPos++;
-        return {TokenType::RBRACE, "}", m_CurrentPos};
+        currentPos++;
+        return {TokenType::RBRACE, "}", currentPos};
     }
 
-    return {TokenType::UNKNOWN, std::string(1, currentChar), m_CurrentPos};
+    return {TokenType::UNKNOWN, std::string(1, currentChar), currentPos};
 }
 
 bool Lexer::HasNextToken()
 {
-    return m_CurrentPos < m_Input.size();
+    return currentPos < input.size();
 }
 
 Token Lexer::readIdentifier()
 {
-    int startPos = m_CurrentPos;
+    int startPos = currentPos;
     std::string result;
 
-    while (m_CurrentPos < m_Input.size() && (std::isalnum(m_Input[m_CurrentPos]) || m_Input[m_CurrentPos] == '_'))
+    while (currentPos < input.size() && (std::isalnum(input[currentPos]) || input[currentPos] == '_'))
     {
-        result += m_Input[m_CurrentPos++];
+        result += input[currentPos++];
     }
 
     if (result == "let")
@@ -161,28 +162,28 @@ Token Lexer::readIdentifier()
 
 Token Lexer::readNumber(bool isNegative)
 {
-    int startPos = m_CurrentPos;
+    int startPos = currentPos;
     std::string result;
 
     if (isNegative)
     {
         result += '-';
-        m_CurrentPos++;
+        currentPos++;
     }
 
-    while (m_CurrentPos < m_Input.size() && std::isdigit(m_Input[m_CurrentPos]))
+    while (currentPos < input.size() && std::isdigit(input[currentPos]))
     {
-        result += m_Input[m_CurrentPos++];
+        result += input[currentPos++];
     }
 
-    if (m_CurrentPos < m_Input.size() && m_Input[m_CurrentPos] == '.')
+    if (currentPos < input.size() && input[currentPos] == '.')
     {
         result += '.';
-        m_CurrentPos++;
+        currentPos++;
 
-        while (m_CurrentPos < m_Input.size() && std::isdigit(m_Input[m_CurrentPos]))
+        while (currentPos < input.size() && std::isdigit(input[currentPos]))
         {
-            result += m_Input[m_CurrentPos++];
+            result += input[currentPos++];
         }
     }
 
@@ -191,24 +192,24 @@ Token Lexer::readNumber(bool isNegative)
 
 Token Lexer::readString()
 {
-    int startPos = m_CurrentPos;
-    m_CurrentPos++;
+    int startPos = currentPos;
+    currentPos++;
 
     std::string result;
 
-    while (m_CurrentPos < m_Input.size())
+    while (currentPos < input.size())
     {
-        char currentChar = m_Input[m_CurrentPos];
+        char currentChar = input[currentPos];
 
         if (currentChar == '"')
         {
-            m_CurrentPos++;
+            currentPos++;
             return {TokenType::STRING, result, startPos};
         }
 
-        if (currentChar == '\\' && m_CurrentPos + 1 < m_Input.size())
+        if (currentChar == '\\' && currentPos + 1 < input.size())
         {
-            char nextChar = m_Input[m_CurrentPos + 1];
+            char nextChar = input[currentPos + 1];
             switch (nextChar)
             {
             case 'n':
@@ -230,12 +231,12 @@ Token Lexer::readString()
                 result += nextChar;
                 break;
             }
-            m_CurrentPos += 2;
+            currentPos += 2;
             continue;
         }
 
         result += currentChar;
-        m_CurrentPos++;
+        currentPos++;
     }
 
     printf("Syntax Error: Unterminate string literal at positon %i\n", startPos);

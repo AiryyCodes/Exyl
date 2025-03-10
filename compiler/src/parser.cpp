@@ -11,25 +11,25 @@ std::vector<std::shared_ptr<ASTNode>> Parser::Parse()
 {
     std::vector<std::shared_ptr<ASTNode>> nodes;
 
-    while (currentToken().type != TokenType::TK_EOF)
+    while (CurrentToken().type != TokenType::TK_EOF)
     {
-        if (currentToken().type == TokenType::KEYWORD)
+        if (CurrentToken().type == TokenType::KEYWORD)
         {
-            if (currentToken().value == "let")
+            if (CurrentToken().value == "let")
             {
                 nodes.push_back(parseVariableDecl());
             }
-            else if (currentToken().value == "fun")
+            else if (CurrentToken().value == "fun")
             {
                 nodes.push_back(parseFunctionDecl());
             }
-            else if (currentToken().value == "extern")
+            else if (CurrentToken().value == "extern")
             {
                 nodes.push_back(parseExternStatement());
             }
             else
             {
-                printf("Syntax Error: Unexpected keyword %s\n", currentToken().value.c_str());
+                printf("Syntax Error: Unexpected keyword %s\n", CurrentToken().value.c_str());
                 exit(1);
             }
         }
@@ -42,12 +42,12 @@ std::vector<std::shared_ptr<ASTNode>> Parser::Parse()
             }
             else
             {
-                printf("Syntax Error: Unexpected token %s\n", currentToken().value.c_str());
+                printf("Syntax Error: Unexpected token %s\n", CurrentToken().value.c_str());
                 exit(1);
             }
         }
 
-        if (peekToken().type == TokenType::UNKNOWN)
+        if (PeekToken().type == TokenType::UNKNOWN)
         {
             break;
         }
@@ -58,33 +58,33 @@ std::vector<std::shared_ptr<ASTNode>> Parser::Parse()
 
 std::shared_ptr<VariableDeclaration> Parser::parseVariableDecl()
 {
-    expect(TokenType::KEYWORD, "let");
+    Expect(TokenType::KEYWORD, "let");
 
-    Token identifierToken = nextToken();
-    expect(TokenType::IDENTIFIER);
+    Token identifierToken = NextToken();
+    Expect(TokenType::IDENTIFIER);
     std::string varName = identifierToken.value;
 
-    nextToken();
+    NextToken();
 
     std::string type;
-    if (currentToken().type == TokenType::COLON)
+    if (CurrentToken().type == TokenType::COLON)
     {
-        nextToken();
-        expect(TokenType::TYPE);
-        type = currentToken().value;
-        nextToken();
+        NextToken();
+        Expect(TokenType::TYPE);
+        type = CurrentToken().value;
+        NextToken();
     }
 
     std::string value;
-    if (currentToken().type == TokenType::EQUALS)
+    if (CurrentToken().type == TokenType::EQUALS)
     {
-        nextToken();
-        if (currentToken().type == TokenType::STRING)
-            expect(TokenType::STRING);
-        else if (currentToken().type == TokenType::NUMBER)
-            expect(TokenType::NUMBER);
-        value = currentToken().value;
-        nextToken();
+        NextToken();
+        if (CurrentToken().type == TokenType::STRING)
+            Expect(TokenType::STRING);
+        else if (CurrentToken().type == TokenType::NUMBER)
+            Expect(TokenType::NUMBER);
+        value = CurrentToken().value;
+        NextToken();
     }
 
     if (value.empty() && type.empty())
@@ -158,64 +158,64 @@ std::shared_ptr<VariableDeclaration> Parser::parseVariableDecl()
         }
     }
 
-    expect(TokenType::SEMICOLON);
+    Expect(TokenType::SEMICOLON);
 
-    nextToken();
+    NextToken();
 
     return std::make_shared<VariableDeclaration>(varName, type, varValue);
 }
 
 std::shared_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
 {
-    expect(TokenType::KEYWORD, "fun");
+    Expect(TokenType::KEYWORD, "fun");
 
-    Token identifierToken = nextToken();
-    expect(TokenType::IDENTIFIER);
+    Token identifierToken = NextToken();
+    Expect(TokenType::IDENTIFIER);
     std::string name = identifierToken.value;
 
     // Consume function identifier
-    nextToken();
+    NextToken();
 
-    expect(TokenType::LPAREN);
+    Expect(TokenType::LPAREN);
 
     std::vector<std::unique_ptr<Parameter>> parameters;
 
-    if (peekToken().type != TokenType::RPAREN)
+    if (PeekToken().type != TokenType::RPAREN)
     {
         do
         {
-            Token paramToken = nextToken();
-            expect(TokenType::IDENTIFIER);
+            Token paramToken = NextToken();
+            Expect(TokenType::IDENTIFIER);
             std::string paramName = paramToken.value;
 
-            nextToken();
-            expect(TokenType::COLON);
+            NextToken();
+            Expect(TokenType::COLON);
 
-            Token typeToken = nextToken();
-            expect(TokenType::TYPE);
+            Token typeToken = NextToken();
+            Expect(TokenType::TYPE);
             std::string typeName = typeToken.value;
 
             parameters.push_back(std::make_unique<Parameter>(paramName, typeName));
 
-            if (peekToken().type == TokenType::COMMA)
+            if (PeekToken().type == TokenType::COMMA)
             {
-                nextToken();
+                NextToken();
             }
 
-        } while (peekToken().type != TokenType::RPAREN);
+        } while (PeekToken().type != TokenType::RPAREN);
     }
 
-    nextToken();
+    NextToken();
 
-    expect(TokenType::RPAREN);
+    Expect(TokenType::RPAREN);
 
     std::string type;
-    if (peekToken().type == TokenType::COLON)
+    if (PeekToken().type == TokenType::COLON)
     {
-        nextToken();
+        NextToken();
 
-        Token typeToken = nextToken();
-        expect(TokenType::TYPE);
+        Token typeToken = NextToken();
+        Expect(TokenType::TYPE);
         type = typeToken.value;
     }
 
@@ -252,7 +252,7 @@ std::shared_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
         exit(1);
     }
 
-    nextToken(); // Consume type and it is now LBRACE
+    NextToken(); // Consume type and it is now LBRACE
 
     std::unique_ptr<FunctionBody> body = parseFunctionBody();
 
@@ -262,18 +262,18 @@ std::shared_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
 std::unique_ptr<FunctionBody> Parser::parseFunctionBody()
 {
     // Ensure that we expect the opening '{'
-    if (currentToken().type != TokenType::LBRACE)
+    if (CurrentToken().type != TokenType::LBRACE)
     {
         printf("Syntax Error: Expected '{' to begin function body.\n");
         exit(1);
     }
 
-    nextToken(); // Consume '{'
+    NextToken(); // Consume '{'
 
     std::vector<std::shared_ptr<ASTNode>> statements;
 
     // Consume statements until we reach the closing '}'
-    while (peekToken().type != TokenType::RBRACE)
+    while (PeekToken().type != TokenType::RBRACE)
     {
         auto statement = parseStatement();
 
@@ -285,21 +285,20 @@ std::unique_ptr<FunctionBody> Parser::parseFunctionBody()
         statements.push_back(std::move(statement));
     }
 
-    if (currentToken().type != TokenType::RBRACE)
+    if (CurrentToken().type != TokenType::RBRACE)
     {
         printf("Syntax Error: Function body not properly closed with '}'.\n");
         exit(1); // Or handle the error as needed
     }
 
-    nextToken(); // Consume '}'
+    NextToken(); // Consume '}'
 
     return std::make_unique<FunctionBody>(statements);
 }
 
 std::shared_ptr<ASTNode> Parser::parseStatement()
 {
-    Token token = currentToken();
-    // printf("Current token in Parser::parseStatement: %s (%s)\n", token.value.c_str(), tokenTypeToString(token.type).c_str());
+    Token token = CurrentToken();
 
     if (token.type == TokenType::KEYWORD && token.value == "let")
     {
@@ -322,65 +321,63 @@ std::shared_ptr<ASTNode> Parser::parseStatement()
 
 std::shared_ptr<ExternStatement> Parser::parseExternStatement()
 {
-    expect(TokenType::KEYWORD, "extern");
+    Expect(TokenType::KEYWORD, "extern");
 
-    Token tokenName = nextToken();
+    Token tokenName = NextToken();
 
-    expect(TokenType::IDENTIFIER);
-
-    printf("Next token: %s\n", peekToken().value.c_str());
+    Expect(TokenType::IDENTIFIER);
 
     std::vector<std::string> parameters;
-    if (peekToken().type == TokenType::LPAREN)
+    if (PeekToken().type == TokenType::LPAREN)
     {
-        nextToken();
+        NextToken();
 
-        if (peekToken().type != TokenType::RPAREN)
+        if (PeekToken().type != TokenType::RPAREN)
         {
             do
             {
-                Token paramToken = nextToken();
-                expect(TokenType::IDENTIFIER);
+                Token paramToken = NextToken();
+                Expect(TokenType::IDENTIFIER);
                 std::string paramName = paramToken.value;
 
-                if (peekToken().type == TokenType::COMMA)
+                if (PeekToken().type == TokenType::COMMA)
                 {
-                    nextToken();
+                    NextToken();
                 }
 
                 parameters.push_back(paramName);
-            } while (peekToken().type != TokenType::RPAREN);
+            } while (PeekToken().type != TokenType::RPAREN);
 
-            nextToken();
+            NextToken();
         }
     }
 
     // Should be ':'
-    nextToken();
+    NextToken();
 
     // Should be the type
-    Token tokenType = nextToken();
+    Token tokenType = NextToken();
 
-    expect(TokenType::TYPE);
+    Expect(TokenType::TYPE);
 
-    nextToken();
+    NextToken();
 
-    expect(TokenType::SEMICOLON);
+    Expect(TokenType::SEMICOLON);
 
-    nextToken();
+    NextToken();
 
     return std::make_shared<ExternStatement>(tokenName.value, tokenType.value);
 }
 
 std::shared_ptr<ASTNode> Parser::parseExpression()
 {
-    if (currentToken().type == TokenType::IDENTIFIER)
+    if (CurrentToken().type == TokenType::IDENTIFIER)
     {
-        Token tokenName = currentToken();
+        Token tokenName = CurrentToken();
         printf("Identifier Name: %s\n", tokenName.value.c_str());
-        nextToken();
+        NextToken();
 
-        if (currentToken().type == TokenType::LPAREN)
+        if (CurrentToken().type == TokenType::LPAREN)
         {
             return parseFuncCall(tokenName.value);
         }
@@ -388,43 +385,43 @@ std::shared_ptr<ASTNode> Parser::parseExpression()
         return std::make_shared<VariableExpression>(tokenName.value);
     }
 
-    if (currentToken().type == TokenType::STRING)
+    if (CurrentToken().type == TokenType::STRING)
     {
-        std::string valueStr = currentToken().value;
-        nextToken();
+        std::string valueStr = CurrentToken().value;
+        NextToken();
         printf("Current token: %s\n", valueStr.c_str());
         Value value(valueStr);
         return std::make_shared<Literal>(valueStr, Type::STRING, value);
     }
 
-    printf("Unexpected token in expression: %s\n", currentToken().value.c_str());
+    printf("Unexpected token in expression: %s\n", CurrentToken().value.c_str());
     exit(1);
 }
 
 std::shared_ptr<FunctionCall> Parser::parseFuncCall(const std::string &callee)
 {
-    expect(TokenType::LPAREN, "(");
+    Expect(TokenType::LPAREN, "(");
 
     // Should be '('
-    nextToken();
+    NextToken();
 
     std::vector<std::shared_ptr<ASTNode>> args;
-    if (currentToken().type != TokenType::RPAREN)
+    if (CurrentToken().type != TokenType::RPAREN)
     {
         while (true)
         {
             args.push_back(parseExpression());
 
-            if (currentToken().type == TokenType::RPAREN)
+            if (CurrentToken().type == TokenType::RPAREN)
                 break;
 
-            expect(TokenType::COMMA, ",");
-            nextToken();
+            Expect(TokenType::COMMA, ",");
+            NextToken();
         }
     }
 
-    nextToken();
-    nextToken();
+    NextToken();
+    NextToken();
 
     return std::make_shared<FunctionCall>(callee, args);
 }

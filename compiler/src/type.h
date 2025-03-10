@@ -22,17 +22,17 @@ enum class Type
 class Value
 {
 public:
-    Value() : m_Value(std::monostate{}), m_Type(Type::UNKNOWN) {}
-    Value(int8_t int8) : m_Value(int8), m_Type(Type::INT8) {}
-    Value(int16_t int16) : m_Value(int16), m_Type(Type::INT16) {}
-    Value(int32_t int32) : m_Value(int32), m_Type(Type::INT32) {}
-    Value(int64_t int64) : m_Value(int64), m_Type(Type::INT64) {}
-    Value(std::string string) : m_Value(string), m_Type(string.empty() ? Type::UNKNOWN : Type::STRING) {}
-    Value(float value) : m_Value(value), m_Type(Type::FLOAT) {}
+    Value() : value(std::monostate{}), type(Type::UNKNOWN) {}
+    Value(int8_t int8) : value(int8), type(Type::INT8) {}
+    Value(int16_t int16) : value(int16), type(Type::INT16) {}
+    Value(int32_t int32) : value(int32), type(Type::INT32) {}
+    Value(int64_t int64) : value(int64), type(Type::INT64) {}
+    Value(std::string string) : value(string), type(string.empty() ? Type::UNKNOWN : Type::STRING) {}
+    Value(float value) : value(value), type(Type::FLOAT) {}
 
     bool IsEmpty() const
     {
-        return std::holds_alternative<std::monostate>(m_Value);
+        return std::holds_alternative<std::monostate>(value);
     }
 
     std::string GetValueString() const
@@ -52,15 +52,15 @@ public:
             else if constexpr (std::is_same_v<T, float>)
                 return std::to_string(static_cast<float>(val));
             else
-                return "<unsupported type>"; }, m_Value);
+                return "<unsupported type>"; }, value);
     }
 
-    Type m_Type;
+    Type type;
 
-    std::variant<std::monostate, int8_t, int16_t, int32_t, int64_t, std::string, float> m_Value;
+    std::variant<std::monostate, int8_t, int16_t, int32_t, int64_t, std::string, float> value;
 };
 
-static std::string typeToString(Type type);
+static std::string TypeToString(Type type);
 
 template <typename T>
 static Value getValueFromString(const std::string &string, Type type)
@@ -79,7 +79,7 @@ static Value getValueFromString(const std::string &string, Type type)
             if (parsedValue < limitMin || parsedValue > limitMax)
             {
                 printf("Error: Value '%s' exceeds the allowed range for type '%s'. Value must be between %lld and %lld.\n",
-                       string.c_str(), typeToString(type).c_str(), static_cast<long long int>(limitMin), static_cast<long long int>(limitMax));
+                       string.c_str(), TypeToString(type).c_str(), static_cast<long long int>(limitMin), static_cast<long long int>(limitMax));
                 exit(1);
             }
 
@@ -96,7 +96,7 @@ static Value getValueFromString(const std::string &string, Type type)
             if (parsedValue < limitMin || parsedValue > limitMax)
             {
                 printf("Error: Value '%s' exceeds the allowed range for type '%s'. Value must be between %lld and %lld.\n",
-                       string.c_str(), typeToString(type).c_str(), static_cast<long long int>(limitMin), static_cast<long long int>(limitMax));
+                       string.c_str(), TypeToString(type).c_str(), static_cast<long long int>(limitMin), static_cast<long long int>(limitMax));
                 exit(1);
             }
 
@@ -104,13 +104,13 @@ static Value getValueFromString(const std::string &string, Type type)
         }
         else
         {
-            printf("Error: Unknown type '%s' for value '%s'.\n", typeToString(type).c_str(), string.c_str());
+            printf("Error: Unknown type '%s' for value '%s'.\n", TypeToString(type).c_str(), string.c_str());
             exit(1);
         }
     }
     catch (const std::exception &)
     {
-        printf("Error: Invalid value: '%s' for type '%s'\n", string.c_str(), typeToString(type).c_str());
+        printf("Error: Invalid value: '%s' for type '%s'\n", string.c_str(), TypeToString(type).c_str());
         exit(1);
     }
 }
@@ -151,7 +151,7 @@ static Type stringToType(const std::string &type)
     }
 }
 
-static std::string typeToString(Type type)
+static std::string TypeToString(Type type)
 {
     switch (type)
     {

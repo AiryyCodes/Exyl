@@ -30,27 +30,27 @@ void Analyzer::analyzeNode(ASTNode *node)
 
 void Analyzer::analyzeVariableDeclaration(VariableDeclaration *varDecl)
 {
-    if (!scopeManager.defineVar(varDecl->m_Name, varDecl->m_Type))
+    if (!scopeManager.defineVar(varDecl->name, varDecl->type))
     {
-        printf("Variable '%s' is already defined in this scope.\n", varDecl->m_Name.c_str());
+        printf("Variable '%s' is already defined in this scope.\n", varDecl->name.c_str());
         exit(1);
     }
 
     std::string typeLowercase;
-    for (const auto &c : typeToString(varDecl->m_Value.m_Type))
+    for (const auto &c : TypeToString(varDecl->value.type))
     {
         typeLowercase += std::tolower(c);
     }
 
     // TODO: Make this more modular for type aliases and such
-    if (typeLowercase == "int32" && varDecl->m_Type != "int32")
+    if (typeLowercase == "int32" && varDecl->type != "int32")
     {
         typeLowercase.erase(typeLowercase.find("32"), 2);
     }
 
-    if (typeLowercase != varDecl->m_Type)
+    if (typeLowercase != varDecl->type)
     {
-        printf("Error: Expected type '%s' but got '%s'\n", varDecl->m_Type.c_str(), typeLowercase.c_str());
+        printf("Error: Expected type '%s' but got '%s'\n", varDecl->type.c_str(), typeLowercase.c_str());
         exit(1);
     }
 }
@@ -58,24 +58,24 @@ void Analyzer::analyzeVariableDeclaration(VariableDeclaration *varDecl)
 void Analyzer::analyzeFunctionDeclaration(FunctionDeclaration *funcDecl)
 {
     FunctionSymbol funcSymbol;
-    funcSymbol.name = funcDecl->m_Name;
-    funcSymbol.returnType = funcDecl->m_Type;
+    funcSymbol.name = funcDecl->name;
+    funcSymbol.returnType = funcDecl->type;
 
-    for (const auto &param : funcDecl->m_Parameters)
+    for (const auto &param : funcDecl->parameters)
     {
-        funcSymbol.parameters.emplace_back(param->m_Name, param->m_Type);
+        funcSymbol.parameters.emplace_back(param->name, param->type);
     }
 
     // TODO: For now only allow top-level functions
     // Register the function in the global scope
-    if (!scopeManager.defineFunc(funcDecl->m_Name, funcSymbol))
+    if (!scopeManager.defineFunc(funcDecl->name, funcSymbol))
     {
-        printf("Function '%s' is already defined.\n", funcDecl->m_Name.c_str());
+        printf("Function '%s' is already defined.\n", funcDecl->name.c_str());
         exit(1);
     }
 
     // Analyze function body if it exists
-    if (funcDecl->m_Body)
+    if (funcDecl->body)
     {
         analyzeFunctionBody(funcDecl);
     }
@@ -86,16 +86,16 @@ void Analyzer::analyzeFunctionBody(FunctionDeclaration *funcDecl)
     scopeManager.enterScope(); // Create a new function scope
 
     // Define function parameters inside the new scope
-    for (const auto &param : funcDecl->m_Parameters)
+    for (const auto &param : funcDecl->parameters)
     {
-        if (!scopeManager.defineVar(param->m_Name, param->m_Type))
+        if (!scopeManager.defineVar(param->name, param->type))
         {
-            printf("Parameter '%s' is already defined.\n", param->m_Name.c_str());
+            printf("Parameter '%s' is already defined.\n", param->name.c_str());
         }
     }
 
     // Analyze function body statements
-    for (const auto &stmt : funcDecl->m_Body->m_Body)
+    for (const auto &stmt : funcDecl->body->body)
     {
         analyzeNode(stmt.get());
     }

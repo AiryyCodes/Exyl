@@ -8,7 +8,7 @@ class Lexer
 {
 public:
     Lexer(std::string input)
-        : m_Input(input), m_CurrentPos(0) {}
+        : input(input), currentPos(0) {}
 
     Token NextToken();
     bool HasNextToken();
@@ -19,8 +19,8 @@ private:
     Token readString();
 
 private:
-    std::string m_Input;
-    int m_CurrentPos;
+    std::string input;
+    int currentPos;
 
-    bool m_ReturnTypeNext = false;
+    bool returnTypeNext = false;
 };

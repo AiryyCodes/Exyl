@@ -31,7 +31,7 @@ struct Token
     int position;
 };
 
-static std::string tokenTypeToString(TokenType type)
+static std::string TokenTypeToString(TokenType type)
 {
     switch (type)
     {
@@ -72,6 +72,6 @@ static void printTokens(const std::vector<Token> tokens)
 {
     for (const auto &token : tokens)
     {
-        printf("Token: Type: %s Value: %s Position: %i\n", tokenTypeToString(token.type).c_str(), token.value.c_str(), token.position);
+        printf("Token: Type: %s Value: %s Position: %i\n", TokenTypeToString(token.type).c_str(), token.value.c_str(), token.position);
     }
 }

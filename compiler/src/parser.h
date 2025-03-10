@@ -12,43 +12,44 @@ class Parser
 {
 public:
     Parser(Lexer &lexer)
-        : m_Lexer(lexer), m_CurrentToken(lexer.NextToken()) {}
+        : lexer(lexer), currentToken(lexer.NextToken()) {}
 
     std::vector<std::shared_ptr<ASTNode>> Parse();
 
 private:
-    Token &currentToken()
+    Token &CurrentToken()
     {
-        return m_CurrentToken;
+        return currentToken;
     }
 
-    Token &nextToken()
+    Token &NextToken()
     {
-        m_CurrentToken = m_Lexer.NextToken();
-        return m_CurrentToken;
+        currentToken = lexer.NextToken();
+        return currentToken;
     }
 
-    Token peekToken()
+    Token PeekToken()
     {
-        Lexer tmpLexer = m_Lexer;
+        Lexer tmpLexer = lexer;
         return tmpLexer.NextToken();
     }
 
-    void expect(TokenType type, const std::string &value = "")
+    void Expect(TokenType type, const std::string &value = "")
     {
-        if (value.empty() && currentToken().type != type)
+        if (value.empty() && CurrentToken().type != type)
         {
-            std::printf("Syntax Error: Expected token '%s' but found '%s'\n", tokenTypeToString(type).c_str(), currentToken().value.c_str());
+            std::printf("Syntax Error: Expected token '%s' but found '%s'\n", TokenTypeToString(type).c_str(), CurrentToken().value.c_str());
             exit(1);
         }
 
-        if (currentToken().type != type || (value != "" && currentToken().value != value))
+        if (CurrentToken().type != type || (value != "" && CurrentToken().value != value))
         {
-            std::printf("Syntax Error: Expected '%s' but found '%s'\n", value.c_str(), currentToken().value.c_str());
+            std::printf("Syntax Error: Expected '%s' but found '%s'\n", value.c_str(), CurrentToken().value.c_str());
             exit(1);
         }
     }
 
+private:
     std::shared_ptr<VariableDeclaration> parseVariableDecl();
     std::shared_ptr<FunctionDeclaration> parseFunctionDecl();
     std::unique_ptr<FunctionBody> parseFunctionBody();
@@ -58,7 +59,7 @@ private:
     std::shared_ptr<FunctionCall> parseFuncCall(const std::string &callee);
 
 private:
-    Lexer &m_Lexer;
+    Lexer &lexer;
 
-    Token m_CurrentToken;
+    Token currentToken;
 };
