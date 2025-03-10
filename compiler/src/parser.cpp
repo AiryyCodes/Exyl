@@ -421,6 +421,8 @@ std::shared_ptr<FunctionCall> Parser::parseFuncCall(const std::string &callee)
     }
 
     NextToken();
+    Expect(TokenType::SEMICOLON, ";");
+
     NextToken();
 
     return std::make_shared<FunctionCall>(callee, args);
