@@ -6,14 +6,14 @@
 
 void Analyzer::Analyze()
 {
-    scopeManager.enterScope();
+    scopeManager.EnterScope();
 
     for (const auto &node : ast)
     {
         analyzeNode(node.get());
     }
 
-    scopeManager.exitScope();
+    scopeManager.ExitScope();
 }
 
 void Analyzer::analyzeNode(ASTNode *node)
@@ -30,7 +30,7 @@ void Analyzer::analyzeNode(ASTNode *node)
 
 void Analyzer::analyzeVariableDeclaration(VariableDeclaration *varDecl)
 {
-    if (!scopeManager.defineVar(varDecl->name, varDecl->type))
+    if (!scopeManager.DefineVar(varDecl->name, varDecl->type))
     {
         printf("Variable '%s' is already defined in this scope.\n", varDecl->name.c_str());
         exit(1);
@@ -68,7 +68,7 @@ void Analyzer::analyzeFunctionDeclaration(FunctionDeclaration *funcDecl)
 
     // TODO: For now only allow top-level functions
     // Register the function in the global scope
-    if (!scopeManager.defineFunc(funcDecl->name, funcSymbol))
+    if (!scopeManager.DefineFunc(funcDecl->name, funcSymbol))
     {
         printf("Function '%s' is already defined.\n", funcDecl->name.c_str());
         exit(1);
@@ -83,12 +83,12 @@ void Analyzer::analyzeFunctionDeclaration(FunctionDeclaration *funcDecl)
 
 void Analyzer::analyzeFunctionBody(FunctionDeclaration *funcDecl)
 {
-    scopeManager.enterScope(); // Create a new function scope
+    scopeManager.EnterScope(); // Create a new function scope
 
     // Define function parameters inside the new scope
     for (const auto &param : funcDecl->parameters)
     {
-        if (!scopeManager.defineVar(param->name, param->type))
+        if (!scopeManager.DefineVar(param->name, param->type))
         {
             printf("Parameter '%s' is already defined.\n", param->name.c_str());
         }
@@ -100,5 +100,5 @@ void Analyzer::analyzeFunctionBody(FunctionDeclaration *funcDecl)
         analyzeNode(stmt.get());
     }
 
-    scopeManager.exitScope(); // Exit function scope
+    scopeManager.ExitScope(); // Exit function scope
 }

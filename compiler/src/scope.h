@@ -19,7 +19,7 @@ public:
     explicit Scope(std::shared_ptr<Scope> parent = nullptr)
         : parent(std::move(parent)) {}
 
-    bool defineVar(const std::string &name, const std::string &type)
+    bool DefineVar(const std::string &name, const std::string &type)
     {
         if (symbols.find(name) != symbols.end())
         {
@@ -29,17 +29,17 @@ public:
         return true;
     }
 
-    std::string lookupVar(const std::string &name)
+    std::string LookupVar(const std::string &name)
     {
         auto it = symbols.find(name);
         if (it != symbols.end())
         {
             return it->second;
         }
-        return parent ? parent->lookupVar(name) : "";
+        return parent ? parent->LookupVar(name) : "";
     }
 
-    bool defineFunc(const std::string &name, FunctionSymbol func)
+    bool DefineFunc(const std::string &name, FunctionSymbol func)
     {
         if (functions.find(name) != functions.end())
         {
@@ -49,14 +49,14 @@ public:
         return true;
     }
 
-    FunctionSymbol *lookupFunc(const std::string &name)
+    FunctionSymbol *LookupFunc(const std::string &name)
     {
         auto it = functions.find(name);
         if (it != functions.end())
         {
             return &it->second;
         }
-        return parent ? parent->lookupFunc(name) : nullptr;
+        return parent ? parent->LookupFunc(name) : nullptr;
     }
 
 private:
@@ -72,15 +72,15 @@ class ScopeManager
 public:
     ScopeManager()
     {
-        enterScope();
+        EnterScope();
     }
 
-    void enterScope()
+    void EnterScope()
     {
         currentScope = std::make_shared<Scope>(currentScope);
     }
 
-    void exitScope()
+    void ExitScope()
     {
         if (currentScope->parent)
         {
@@ -88,24 +88,24 @@ public:
         }
     }
 
-    bool defineVar(const std::string &name, const std::string &type)
+    bool DefineVar(const std::string &name, const std::string &type)
     {
-        return currentScope->defineVar(name, type);
+        return currentScope->DefineVar(name, type);
     }
 
-    std::string lookupVar(const std::string &name)
+    std::string LookupVar(const std::string &name)
     {
-        return currentScope->lookupVar(name);
+        return currentScope->LookupVar(name);
     }
 
-    bool defineFunc(const std::string &name, FunctionSymbol func)
+    bool DefineFunc(const std::string &name, FunctionSymbol func)
     {
-        return currentScope->defineFunc(name, func);
+        return currentScope->DefineFunc(name, func);
     }
 
-    FunctionSymbol *lookupFunc(const std::string &name)
+    FunctionSymbol *LookupFunc(const std::string &name)
     {
-        return currentScope->lookupFunc(name);
+        return currentScope->LookupFunc(name);
     }
 
 private:
