@@ -166,7 +166,16 @@ public:
         visitor.Visit(*this);
     }
 
-    Type GetType() override { return Type(Type::Kind::Unknown); }
+    Type GetType() override
+    {
+        FunctionSymbol *symbol = ScopeManager::Get().LookupFunc(callee);
+        if (!symbol)
+        {
+            printf("Error: Function '%s' is not defined.\n", callee.c_str());
+            exit(1);
+        }
+        return symbol->returnType;
+    }
 
     std::string callee;
     std::vector<std::shared_ptr<ASTNode>> args;
