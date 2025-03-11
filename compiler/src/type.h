@@ -22,7 +22,8 @@ public:
         Int32,
         Int64,
         String,
-        Float
+        Float,
+        Double
     };
 
     Type() : kind(Kind::Unknown) {}
@@ -49,6 +50,8 @@ public:
             return "string";
         case Kind::Float:
             return "float";
+        case Kind::Double:
+            return "double";
         }
         return "unknown";
     }
@@ -89,6 +92,10 @@ public:
         {
             return Kind::Float;
         }
+        else if (string == "double")
+        {
+            return Kind::Double;
+        }
 
         // TODO: Return custom type
         return Kind::Unknown;
@@ -110,6 +117,7 @@ public:
     Value(int64_t int64) : value(int64), type(Type::Kind::Int64) {}
     Value(std::string string) : value(string), type(Type::Kind::String) {}
     Value(float value) : value(value), type(Type::Kind::Float) {}
+    Value(double value) : value(value), type(Type::Kind::Double) {}
 
     bool IsEmpty() const
     {
@@ -132,6 +140,8 @@ public:
                 return std::to_string(static_cast<int64_t>(val));
             else if constexpr (std::is_same_v<T, float>)
                 return std::to_string(static_cast<float>(val));
+            else if constexpr (std::is_same_v<T, double>)
+                return std::to_string(static_cast<double>(val));
             else
                 return "<unsupported type>"; }, value);
     }
@@ -142,7 +152,7 @@ public:
 
 private:
     Type type;
-    std::variant<std::monostate, int8_t, int16_t, int32_t, int64_t, std::string, float> value;
+    std::variant<std::monostate, int8_t, int16_t, int32_t, int64_t, std::string, float, double> value;
 };
 
 template <typename T>
@@ -184,8 +194,10 @@ const std::unordered_map<std::string, TypeConverter> typeHandlers = {
      { return getValueFromString<int32_t>(val, Type::Kind::Int32); }},
     {"int64", [](const std::string &val)
      { return getValueFromString<int64_t>(val, Type::Kind::Int64); }},
-    {"float", [](const std::string &val)
-     { return getValueFromString<float>(val, Type::Kind::Float); }},
     {"string", [](const std::string &val)
      { return std::optional<Value>(Value(val)); }},
+    {"float", [](const std::string &val)
+     { return getValueFromString<float>(val, Type::Kind::Float); }},
+    {"double", [](const std::string &val)
+     { return getValueFromString<double>(val, Type::Kind::Double); }},
 };

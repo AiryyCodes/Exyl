@@ -354,7 +354,61 @@ std::shared_ptr<ASTNode> Parser::parseExpression()
         return std::make_shared<Literal>(valueStr, Type(Type::Kind::String), value);
     }
 
-    printf("Unexpected token in expression: %s\n", CurrentToken().value.c_str());
+    if (CurrentToken().type == TokenType::NUMBER)
+    {
+        std::string valueStr = CurrentToken().value;
+        NextToken();
+
+        std::optional<Value> value;
+        Type type;
+
+        if (valueStr.find('.') != std::string::npos)
+        {
+            // Floating-point number
+            try
+            {
+                value = Value(std::stof(valueStr));
+                type = Type(Type::Kind::Float);
+            }
+            catch (const std::exception &)
+            {
+                value = Value(std::stof(valueStr));
+                type = Type(Type::Kind::Double);
+            }
+        }
+        else
+        {
+            try
+            {
+                if (valueStr.length() < 11) // Length check to avoid overflow for int32_t (10 digits max)
+                {
+                    int32_t intValue = std::stoi(valueStr);
+                    value = Value(intValue);
+                    type = Type(Type::Kind::Int32);
+                }
+                else
+                {
+                    int64_t intValue = std::stoll(valueStr);
+                    value = Value(intValue);
+                    type = Type(Type::Kind::Int64);
+                }
+            }
+            catch (const std::invalid_argument &e)
+            {
+                printf("Error: Invalid number format: %s\n", valueStr.c_str());
+                exit(1);
+            }
+            catch (const std::out_of_range &e)
+            {
+                printf("Error: Number out of range: %s\n", valueStr.c_str());
+                exit(1);
+            }
+        }
+
+        return std::make_shared<Literal>(valueStr, type, value.value());
+    }
+
+    printf("Error: Unexpected token in expression: %s\n", CurrentToken().value.c_str());
     exit(1);
 }
 

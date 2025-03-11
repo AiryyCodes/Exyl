@@ -76,12 +76,13 @@ private:
 
 class ScopeManager
 {
-public:
+private:
     ScopeManager()
     {
         EnterScope();
     }
 
+public:
     void EnterScope()
     {
         currentScope = std::make_shared<Scope>(currentScope);
@@ -113,6 +114,12 @@ public:
     FunctionSymbol *LookupFunc(const std::string &name)
     {
         return currentScope->LookupFunc(name);
+    }
+
+    static ScopeManager &Get()
+    {
+        static ScopeManager scopeManager;
+        return scopeManager;
     }
 
 private:

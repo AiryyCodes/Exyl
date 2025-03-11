@@ -1,6 +1,7 @@
 #pragma once
 
 #include "codegen/codegen_visitor.h"
+#include "scope.h"
 #include "type.h"
 #include <cstdio>
 #include <memory>
@@ -15,6 +16,8 @@ public:
 
     virtual void Accept(CodeGenVisitor &visitor) = 0;
     virtual void Print() = 0;
+
+    virtual Type GetType() = 0;
 };
 
 class Literal : public ASTNode
@@ -30,8 +33,10 @@ public:
 
     void Accept(CodeGenVisitor &visitor) override
     {
-        // visitor.Visit(*this);
+        visitor.Visit(*this);
     }
+
+    Type GetType() override { return type; }
 
     std::string name;
     Type type;
@@ -54,6 +59,8 @@ public:
         visitor.Visit(*this);
     }
 
+    Type GetType() override { return type; }
+
     std::string name;
     Type type;
     Value value;
@@ -75,6 +82,8 @@ public:
         // visitor.Visit(*this);
     }
 
+    Type GetType() override { return type; }
+
     std::string name;
     Type type;
 };
@@ -95,8 +104,10 @@ public:
 
     void Accept(CodeGenVisitor &visitor) override
     {
-        // visitor.Visit(*this);
+        visitor.Visit(*this);
     }
+
+    Type GetType() override { return Type(Type::Kind::Unknown); }
 
     std::vector<std::shared_ptr<ASTNode>> body;
 };
@@ -126,6 +137,8 @@ public:
         visitor.Visit(*this);
     }
 
+    Type GetType() override { return type; }
+
     std::string name;
     Type type;
     std::vector<std::unique_ptr<Parameter>> parameters;
@@ -150,8 +163,10 @@ public:
 
     void Accept(CodeGenVisitor &visitor) override
     {
-        // visitor.Visit(*this);
+        visitor.Visit(*this);
     }
+
+    Type GetType() override { return Type(Type::Kind::Unknown); }
 
     std::string callee;
     std::vector<std::shared_ptr<ASTNode>> args;
@@ -177,6 +192,8 @@ public:
         visitor.Visit(*this);
     }
 
+    Type GetType() override { return type; }
+
     std::string name;
     Type type;
     std::vector<std::string> parameters;
@@ -195,8 +212,23 @@ public:
 
     void Accept(CodeGenVisitor &visitor) override
     {
-        // visitor.Visit(*this);
+        visitor.Visit(*this);
     }
 
+    Type GetType() override
+    {
+        // Lookup the variable in the current scope manager
+        std::optional<Type> varTypeOpt = ScopeManager::Get().LookupVar(name);
+
+        if (varTypeOpt)
+        {
+            return varTypeOpt.value(); // Return the type if found
+        }
+        else
+        {
+            // If the variable is not found, return Unknown type
+            return Type(Type::Kind::Unknown);
+        }
+    }
     std::string name;
 };

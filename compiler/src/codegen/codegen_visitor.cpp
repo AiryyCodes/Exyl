@@ -1,12 +1,35 @@
 #include "codegen/codegen_visitor.h"
 #include "ast.h"
 
+#include <llvm/Support/raw_ostream.h>
 #include <llvm/ADT/SmallString.h>
 #include <llvm/Support/Format.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Type.h>
 #include <string>
+
+void LLVMCodeGenVisitor::Visit(Literal &node)
+{
+    llvm::Constant *value = getLLVMValue(node.value);
+
+    llvm::MD5 md5;
+    md5.update(node.value.GetValueString() + node.name);
+    llvm::MD5::MD5Result result;
+    md5.final(result);
+
+    llvm::SmallString<32> uniqueName;
+    for (auto byte : result)
+    {
+        llvm::raw_svector_ostream(uniqueName) << llvm::format_hex(byte, 2);
+    }
+
+    value->getType()->print(llvm::outs());
+
+    llvm::GlobalVariable *globalVar = new llvm::GlobalVariable(module, value->getType(), true, llvm::GlobalValue::PrivateLinkage, value, uniqueName.str());
+
+    currentValue = globalVar;
+}
 
 void LLVMCodeGenVisitor::Visit(VariableDeclaration &node)
 {
@@ -23,6 +46,14 @@ void LLVMCodeGenVisitor::Visit(VariableDeclaration &node)
         llvm::GlobalValue::ExternalLinkage,
         getLLVMValue(node.value),
         node.name);
+
+    currentValue = globalVar;
+}
+
+void LLVMCodeGenVisitor::Visit(VariableExpression &node)
+{
+    llvm::GlobalVariable *globalVar = module.getGlobalVariable(node.name);
+    currentValue = globalVar;
 }
 
 void LLVMCodeGenVisitor::Visit(FunctionDeclaration &node)
@@ -36,45 +67,48 @@ void LLVMCodeGenVisitor::Visit(FunctionDeclaration &node)
     llvm::BasicBlock *entry = llvm::BasicBlock::Create(context, "entry", func);
     builder.SetInsertPoint(entry);
 
-    for (const auto &child : node.body->body)
+    node.body->Accept(*this);
+
+    builder.CreateRetVoid();
+
+    currentValue = func;
+}
+
+void LLVMCodeGenVisitor::Visit(FunctionBody &node)
+{
+    for (const auto &child : node.body)
     {
-        if (auto callStmt = dynamic_cast<FunctionCall *>(child.get()))
+        child->Accept(*this);
+    }
+}
+
+void LLVMCodeGenVisitor::Visit(FunctionCall &node)
+{
+    std::vector<llvm::Value *> calledArgs;
+    for (const auto &arg : node.args)
+    {
+        currentValue = nullptr;
+        arg->Accept(*this);
+
+        if (currentValue)
         {
-            std::vector<llvm::Value *> calledArgs;
-            for (const auto &arg : callStmt->args)
-            {
-                if (auto literal = dynamic_cast<Literal *>(arg.get()))
-                {
-                    // TODO: Create a function to make creating variables easier
-                    llvm::Constant *value = getLLVMValue(literal->value);
-
-                    llvm::MD5 md5;
-                    md5.update(literal->value.GetValueString() + literal->name);
-                    llvm::MD5::MD5Result result;
-                    md5.final(result);
-
-                    llvm::SmallString<32> uniqueName;
-                    for (auto byte : result)
-                    {
-                        llvm::raw_svector_ostream(uniqueName) << llvm::format_hex(byte, 2);
-                    }
-
-                    llvm::GlobalVariable *globalStr = new llvm::GlobalVariable(module, value->getType(), true, llvm::GlobalValue::PrivateLinkage, value, uniqueName.str());
-                    calledArgs.push_back(globalStr);
-                }
-                else if (auto variable = dynamic_cast<VariableExpression *>(arg.get()))
-                {
-                    llvm::GlobalVariable *globalVar = module.getGlobalVariable(variable->name);
-                    calledArgs.push_back(globalVar);
-                }
-            }
-
-            llvm::Function *calledFunc = module.getFunction(callStmt->callee);
-            builder.CreateCall(calledFunc, calledArgs);
+            calledArgs.push_back(currentValue);
+        }
+        else
+        {
+            printf("CodeGen Error: Argument did not produce a value.");
+            exit(1);
         }
     }
 
-    builder.CreateRetVoid();
+    llvm::Function *calledFunc = module.getFunction(node.callee);
+    if (!calledFunc)
+    {
+        printf("CodeGen Error: Function %s not found.", node.callee.c_str());
+        exit(1);
+    }
+
+    currentValue = builder.CreateCall(calledFunc, calledArgs);
 }
 
 void LLVMCodeGenVisitor::Visit(ExternStatement &node)
@@ -86,21 +120,32 @@ void LLVMCodeGenVisitor::Visit(ExternStatement &node)
         llvm::Function::ExternalLinkage,
         node.name,
         module);
+
+    currentValue = func;
 }
 
 llvm::Type *LLVMCodeGenVisitor::getLLVMType(const Type &type)
 {
-    if (type.GetKind() == Type::Kind::Void)
+    switch (type.GetKind())
     {
+    case Type::Kind::Unknown:
+        return nullptr;
+    case Type::Kind::Void:
         return llvm::Type::getVoidTy(context);
-    }
-    else if (type.GetKind() == Type::Kind::String)
-    {
-        return llvm::PointerType::getUnqual(llvm::Type::getInt8Ty(context));
-    }
-    else if (type.GetKind() == Type::Kind::Int32)
-    {
+    case Type::Kind::Int8:
+        return llvm::Type::getInt8Ty(context);
+    case Type::Kind::Int16:
+        return llvm::Type::getInt16Ty(context);
+    case Type::Kind::Int32:
         return llvm::Type::getInt32Ty(context);
+    case Type::Kind::Int64:
+        return llvm::Type::getInt64Ty(context);
+    case Type::Kind::String:
+        return llvm::PointerType::getUnqual(llvm::Type::getInt8Ty(context));
+    case Type::Kind::Float:
+        return llvm::Type::getFloatTy(context);
+    case Type::Kind::Double:
+        return llvm::Type::getDoubleTy(context);
     }
 
     return nullptr;
@@ -111,10 +156,21 @@ llvm::Constant *LLVMCodeGenVisitor::getLLVMValue(Value &value)
     return std::visit([this](const auto &val) -> llvm::Constant *
                       {
         using T = std::decay_t<decltype(val)>;
-        if constexpr (std::is_same_v<T, std::string>)
-            return llvm::ConstantDataArray::getString(context, val, true);
+
+        if constexpr (std::is_same_v<T, int8_t>)
+            return llvm::ConstantInt::get(llvm::Type::getInt8Ty(context), val, true);
+        else if constexpr (std::is_same_v<T, int16_t>)
+            return llvm::ConstantInt::get(llvm::Type::getInt16Ty(context), val, true);
         else if constexpr (std::is_same_v<T, int32_t>)
             return llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), val, true);
+        else if constexpr (std::is_same_v<T, int64_t>)
+            return llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), val, true);
+        else if constexpr (std::is_same_v<T, std::string>)
+            return llvm::ConstantDataArray::getString(context, val, true);
+        else if constexpr (std::is_same_v<T, float>)
+            return llvm::ConstantFP::get(llvm::Type::getFloatTy(context), val);
+        else if constexpr (std::is_same_v<T, double>)
+            return llvm::ConstantFP::get(llvm::Type::getDoubleTy(context), val);
         else
             return nullptr; }, value.GetValue());
 }

@@ -10,7 +10,7 @@
 #include <vector>
 
 const std::string TEST_SOURCE = R"(
-let test_var0: int = 69;
+let test_var0: double = 69;
 let test_var1 = "Hello, Exyl!\n";
 let test_var2 = "Hello, Main!\n";
 
