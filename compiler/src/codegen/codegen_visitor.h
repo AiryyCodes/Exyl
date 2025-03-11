@@ -31,7 +31,7 @@ public:
     llvm::Module &GetModule() { return module; }
 
 private:
-    llvm::Type *getLLVMType(const std::string &type);
+    llvm::Type *getLLVMType(const Type &type);
     llvm::Constant *getLLVMValue(Value &value);
 
 private:

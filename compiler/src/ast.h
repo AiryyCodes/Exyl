@@ -25,7 +25,7 @@ public:
 
     virtual void Print() override
     {
-        printf("Literal: Name: %s Type: %s Value: %s\n", name.c_str(), TypeToString(type).c_str(), value.GetValueString().c_str());
+        printf("Literal: Name: %s Type: %s Value: %s\n", name.c_str(), type.ToString().c_str(), value.GetValueString().c_str());
     }
 
     void Accept(CodeGenVisitor &visitor) override
@@ -41,12 +41,12 @@ public:
 class VariableDeclaration : public ASTNode
 {
 public:
-    VariableDeclaration(const std::string &name, const std::string &type, Value value)
+    VariableDeclaration(const std::string &name, const Type &type, Value &value)
         : name(name), type(type), value(value) {}
 
     virtual void Print() override
     {
-        printf("Variable Declaration: Name: %s Type: %s Value: %s Value Type: %s\n", name.c_str(), type.c_str(), value.GetValueString().c_str(), TypeToString(value.type).c_str());
+        printf("Variable Declaration: Name: %s Type: %s Value: %s Value Type: %s\n", name.c_str(), type.ToString().c_str(), value.GetValueString().c_str(), value.GetType().ToString().c_str());
     }
 
     void Accept(CodeGenVisitor &visitor) override
@@ -55,19 +55,19 @@ public:
     }
 
     std::string name;
-    std::string type;
+    Type type;
     Value value;
 };
 
 class Parameter : public ASTNode
 {
 public:
-    Parameter(const std::string &name, const std::string &type)
+    Parameter(const std::string &name, const Type &type)
         : name(name), type(type) {}
 
     virtual void Print() override
     {
-        printf("Parameter: Name: %s Type: %s\n", name.c_str(), type.c_str());
+        printf("Parameter: Name: %s Type: %s\n", name.c_str(), type.ToString().c_str());
     }
 
     void Accept(CodeGenVisitor &visitor) override
@@ -76,7 +76,7 @@ public:
     }
 
     std::string name;
-    std::string type;
+    Type type;
 };
 
 class FunctionBody : public ASTNode
@@ -104,14 +104,12 @@ public:
 class FunctionDeclaration : public ASTNode
 {
 public:
-    FunctionDeclaration(const std::string &name, const std::string &type, std::vector<std::unique_ptr<Parameter>> parameters)
-        : name(name), type(type), parameters(std::move(parameters)), body(nullptr) {}
-    FunctionDeclaration(const std::string &name, const std::string &type, std::vector<std::unique_ptr<Parameter>> parameters, std::unique_ptr<FunctionBody> body)
-        : name(name), type(type), parameters(std::move(parameters)), body(std::move(body)) {}
+    FunctionDeclaration(const std::string &name, const Type &type, std::vector<std::unique_ptr<Parameter>> parameters, std::unique_ptr<FunctionBody> body = nullptr)
+        : name(name), type(type), parameters(std::move(parameters)), body(body != nullptr ? std::move(body) : nullptr) {}
 
     virtual void Print() override
     {
-        printf("Function Declaration: Name: %s Type: %s\n", name.c_str(), type.c_str());
+        printf("Function Declaration: Name: %s Type: %s\n", name.c_str(), type.ToString().c_str());
         for (const auto &param : parameters)
         {
             param->Print();
@@ -129,7 +127,7 @@ public:
     }
 
     std::string name;
-    std::string type;
+    Type type;
     std::vector<std::unique_ptr<Parameter>> parameters;
     std::unique_ptr<FunctionBody> body;
 };
@@ -162,12 +160,12 @@ public:
 class ExternStatement : public ASTNode
 {
 public:
-    ExternStatement(const std::string &name, const std::string &type, const std::vector<std::string> &parameters = {})
+    ExternStatement(const std::string &name, const Type &type, const std::vector<std::string> &parameters = {})
         : name(name), type(type), parameters(parameters) {}
 
     virtual void Print() override
     {
-        printf("Extern Statement: Name: %s Type: %s\n", name.c_str(), type.c_str());
+        printf("Extern Statement: Name: %s Type: %s\n", name.c_str(), type.ToString().c_str());
         for (const auto &param : parameters)
         {
             printf("Extern Param: Type: %s\n", param.c_str());
@@ -180,7 +178,7 @@ public:
     }
 
     std::string name;
-    std::string type;
+    Type type;
     std::vector<std::string> parameters;
 };
 

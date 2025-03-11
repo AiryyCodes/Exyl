@@ -66,12 +66,12 @@ std::shared_ptr<VariableDeclaration> Parser::parseVariableDecl()
 
     NextToken();
 
-    std::string type;
+    std::string typeStr;
     if (CurrentToken().type == TokenType::COLON)
     {
         NextToken();
         Expect(TokenType::TYPE);
-        type = CurrentToken().value;
+        typeStr = CurrentToken().value;
         NextToken();
     }
 
@@ -87,13 +87,13 @@ std::shared_ptr<VariableDeclaration> Parser::parseVariableDecl()
         NextToken();
     }
 
-    if (value.empty() && type.empty())
+    if (value.empty() && typeStr.empty())
     {
         printf("Syntax Error: Variable '%s' must have either a type or a value.\n", varName.c_str());
         exit(1);
     }
 
-    if (type.empty())
+    if (typeStr.empty())
     {
         // Attempt to infer the type based on the value
         try
@@ -103,57 +103,40 @@ std::shared_ptr<VariableDeclaration> Parser::parseVariableDecl()
                 try
                 {
                     std::stof(value); // Try parsing as float
-                    type = "float";
+                    typeStr = "float";
                 }
                 catch (const std::exception &)
                 {
                     std::stod(value); // If float fails, try double
-                    type = "double";
+                    typeStr = "double";
                 }
             }
             else
             {
                 std::stoi(value); // Try parsing as int (INT32)
-                type = "int32";
+                typeStr = "int32";
             }
         }
         catch (const std::exception &)
         {
-            type = "string"; // Default to string if no valid value
+            typeStr = "string"; // Default to string if no valid value
         }
     }
 
+    Type type(Type::FromString(typeStr));
+
     // Create the appropriate Value based on the inferred or provided type
-    Value varValue;
+    std::optional<Value> varValue;
     if (!value.empty())
     {
-        if (type == "int8")
+        auto it = typeHandlers.find(typeStr);
+        if (it != typeHandlers.end())
         {
-            varValue = getValueFromString<int8_t>(value, Type::INT8);
-        }
-        else if (type == "int16")
-        {
-            varValue = getValueFromString<int16_t>(value, Type::INT16);
-        }
-        else if (type == "int32" || type == "int")
-        {
-            varValue = getValueFromString<int32_t>(value, Type::INT32);
-        }
-        else if (type == "int64")
-        {
-            varValue = getValueFromString<int64_t>(value, Type::INT64);
-        }
-        else if (type == "string" || type.empty())
-        {
-            varValue = Value(value); // Treat as a string if type is empty or string
-        }
-        else if (type == "float")
-        {
-            varValue = getValueFromString<float>(value, Type::FLOAT);
+            varValue = it->second(value);
         }
         else
         {
-            printf("Error: Unsupported type '%s' for value '%s'.\n", type.c_str(), value.c_str());
+            printf("Error: Unsupported type '%s' for value '%s'.\n", typeStr.c_str(), value.c_str());
             exit(1);
         }
     }
@@ -162,7 +145,7 @@ std::shared_ptr<VariableDeclaration> Parser::parseVariableDecl()
 
     NextToken();
 
-    return std::make_shared<VariableDeclaration>(varName, type, varValue);
+    return std::make_shared<VariableDeclaration>(varName, type, varValue.value());
 }
 
 std::shared_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
@@ -195,7 +178,8 @@ std::shared_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
             Expect(TokenType::TYPE);
             std::string typeName = typeToken.value;
 
-            parameters.push_back(std::make_unique<Parameter>(paramName, typeName));
+            Type type(Type::FromString(typeName));
+            parameters.push_back(std::make_unique<Parameter>(paramName, type));
 
             if (PeekToken().type == TokenType::COMMA)
             {
@@ -209,47 +193,21 @@ std::shared_ptr<FunctionDeclaration> Parser::parseFunctionDecl()
 
     Expect(TokenType::RPAREN);
 
-    std::string type;
+    std::string typeStr;
     if (PeekToken().type == TokenType::COLON)
     {
         NextToken();
 
         Token typeToken = NextToken();
         Expect(TokenType::TYPE);
-        type = typeToken.value;
+        typeStr = typeToken.value;
     }
 
-    if (type.empty())
-    {
-        type = "void";
-    }
+    Type type(Type::FromString(typeStr));
 
-    // TODO: Make this more modular
-    // Create the appropriate Value based on the inferred or provided type
-    if (type == "void" || type.empty())
+    if (type.GetKind() == Type::Kind::Unknown)
     {
-    }
-    else if (type == "int8")
-    {
-    }
-    else if (type == "int16")
-    {
-    }
-    else if (type == "int32" || type == "int")
-    {
-    }
-    else if (type == "int64")
-    {
-    }
-    else if (type == "string")
-    {
-    }
-    else if (type == "float")
-    {
-    }
-    else
-    {
-        printf("Error: Unsupported type '%s' for function '%s'.\n", type.c_str(), name.c_str());
+        printf("Error: Unsupported type '%s' for function '%s'.\n", typeStr.c_str(), name.c_str());
         exit(1);
     }
 
@@ -367,7 +325,8 @@ std::shared_ptr<ExternStatement> Parser::parseExternStatement()
 
     NextToken();
 
-    return std::make_shared<ExternStatement>(tokenName.value, tokenType.value);
+    Type type(Type::FromString(tokenType.value));
+    return std::make_shared<ExternStatement>(tokenName.value, type, parameters);
 }
 
 std::shared_ptr<ASTNode> Parser::parseExpression()
@@ -392,7 +351,7 @@ std::shared_ptr<ASTNode> Parser::parseExpression()
         NextToken();
         printf("Current token: %s\n", valueStr.c_str());
         Value value(valueStr);
-        return std::make_shared<Literal>(valueStr, Type::STRING, value);
+        return std::make_shared<Literal>(valueStr, Type(Type::Kind::String), value);
     }
 
     printf("Unexpected token in expression: %s\n", CurrentToken().value.c_str());

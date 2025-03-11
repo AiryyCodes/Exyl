@@ -1,6 +1,9 @@
 #pragma once
 
+#include "type.h"
+
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -8,9 +11,13 @@
 
 struct FunctionSymbol
 {
+    FunctionSymbol() = default;
+    FunctionSymbol(const std::string &name, const Type &returnType, std::vector<std::pair<std::string, Type>> parameters = {})
+        : name(name), returnType(returnType), parameters(parameters) {}
+
     std::string name;
-    std::string returnType;
-    std::vector<std::pair<std::string, std::string>> parameters;
+    Type returnType;
+    std::vector<std::pair<std::string, Type>> parameters;
 };
 
 class Scope
@@ -19,7 +26,7 @@ public:
     explicit Scope(std::shared_ptr<Scope> parent = nullptr)
         : parent(std::move(parent)) {}
 
-    bool DefineVar(const std::string &name, const std::string &type)
+    bool DefineVar(const std::string &name, const Type &type)
     {
         if (symbols.find(name) != symbols.end())
         {
@@ -29,14 +36,14 @@ public:
         return true;
     }
 
-    std::string LookupVar(const std::string &name)
+    std::optional<Type> LookupVar(const std::string &name)
     {
         auto it = symbols.find(name);
         if (it != symbols.end())
         {
             return it->second;
         }
-        return parent ? parent->LookupVar(name) : "";
+        return parent ? parent->LookupVar(name) : std::nullopt;
     }
 
     bool DefineFunc(const std::string &name, FunctionSymbol func)
@@ -45,7 +52,7 @@ public:
         {
             return false; // Function already exists in this scope
         }
-        functions[name] = std::move(func);
+        functions[name] = func;
         return true;
     }
 
@@ -60,7 +67,7 @@ public:
     }
 
 private:
-    std::unordered_map<std::string, std::string> symbols;
+    std::unordered_map<std::string, Type> symbols;
     std::unordered_map<std::string, FunctionSymbol> functions;
     std::shared_ptr<Scope> parent;
 
@@ -88,12 +95,12 @@ public:
         }
     }
 
-    bool DefineVar(const std::string &name, const std::string &type)
+    bool DefineVar(const std::string &name, const Type &type)
     {
         return currentScope->DefineVar(name, type);
     }
 
-    std::string LookupVar(const std::string &name)
+    std::optional<Type> LookupVar(const std::string &name)
     {
         return currentScope->LookupVar(name);
     }

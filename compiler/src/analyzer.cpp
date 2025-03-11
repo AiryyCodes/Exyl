@@ -36,30 +36,16 @@ void Analyzer::analyzeVariableDeclaration(VariableDeclaration *varDecl)
         exit(1);
     }
 
-    std::string typeLowercase;
-    for (const auto &c : TypeToString(varDecl->value.type))
+    if (varDecl->value.GetType() != varDecl->type)
     {
-        typeLowercase += std::tolower(c);
-    }
-
-    // TODO: Make this more modular for type aliases and such
-    if (typeLowercase == "int32" && varDecl->type != "int32")
-    {
-        typeLowercase.erase(typeLowercase.find("32"), 2);
-    }
-
-    if (typeLowercase != varDecl->type)
-    {
-        printf("Error: Expected type '%s' but got '%s'\n", varDecl->type.c_str(), typeLowercase.c_str());
+        printf("Error: Expected type '%s' but got '%s'\n", varDecl->type.ToString().c_str(), varDecl->value.GetType().ToString().c_str());
         exit(1);
     }
 }
 
 void Analyzer::analyzeFunctionDeclaration(FunctionDeclaration *funcDecl)
 {
-    FunctionSymbol funcSymbol;
-    funcSymbol.name = funcDecl->name;
-    funcSymbol.returnType = funcDecl->type;
+    FunctionSymbol funcSymbol(funcDecl->name, funcDecl->type);
 
     for (const auto &param : funcDecl->parameters)
     {
