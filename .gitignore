@@ -1,0 +1,10 @@
+/target
+
+# Sessions
+Session.vim
+
+# Temporary Files
+/*.ll
+/*.a
+/*.o
+/output
