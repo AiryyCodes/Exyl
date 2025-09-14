@@ -92,6 +92,7 @@ impl Parser {
             Some(Token::Identifier(type_name)) => match type_name.as_str() {
                 "i64" => Ok(Type::I64),
                 "f64" => Ok(Type::F64),
+                "string" => Ok(Type::String),
                 "void" => Ok(Type::Void),
                 other => Err(ParseError {
                     message: format!("Unknown type '{}'", other),
