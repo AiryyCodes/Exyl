@@ -2,14 +2,19 @@ use std::{env, fs};
 
 use inkwell::context::Context;
 
-use crate::{codegen::CodeGen, compile::compile_to_binary, lexer::tokenize, parser::parse};
+use crate::{
+    codegen::CodeGen, compile::compile_to_binary, lexer::tokenize, parser::parse,
+    type_checker::TypeChecker,
+};
 
 mod ast;
+pub mod builtin;
 mod codegen;
 mod compile;
 mod lexer;
 mod parser;
 pub mod token;
+mod type_checker;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -32,12 +37,17 @@ fn main() {
         println!("{:?}", token);
     }
 
-    println!("\n---- AST ----\n");
-
     let program =
         parse(tokens).unwrap_or_else(|err| panic!("Failed to parse tokens: {}", err.message));
 
-    for stmt in &program.body {
+    let mut type_checker = TypeChecker::new();
+    let typed_program = type_checker
+        .type_check_program(program.clone())
+        .unwrap_or_else(|err| panic!("Failed to type check program: {:?}", err));
+
+    println!("\n---- AST ----\n");
+
+    for stmt in &typed_program.body {
         println!("{:?}", stmt);
     }
 
@@ -46,7 +56,7 @@ fn main() {
 
     codegen.declare_print();
 
-    codegen.codegen_program(&program);
+    codegen.codegen_program(&typed_program);
 
     compile_to_binary(&codegen, "output");
 

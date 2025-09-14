@@ -1,1 +1,4 @@
-print(69420);
+let x: i64 = 69;
+
+print("Hello, World!");
+

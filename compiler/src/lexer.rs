@@ -68,10 +68,50 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
                 }
             }
 
+            '"' => {
+                chars.next(); // Consume the opening quote
+                let mut string_content = String::new();
+
+                while let Some(&c) = chars.peek() {
+                    match c {
+                        '"' => {
+                            chars.next(); // Consume the closing quote
+                            break;
+                        }
+                        '\\' => {
+                            chars.next(); // Consume the backslash
+                            if let Some(escaped) = chars.next() {
+                                let escaped_char = match escaped {
+                                    'n' => '\n',
+                                    'r' => '\r',
+                                    't' => '\t',
+                                    '"' => '"',
+                                    '\\' => '\\',
+                                    other => other, // Default: keep the character
+                                };
+                                string_content.push(escaped_char);
+                            } else {
+                                return Err(LexError {
+                                    message: "Unfinished escape sequence in string".to_string(),
+                                });
+                            }
+                        }
+                        _ => {
+                            string_content.push(c);
+                            chars.next();
+                        }
+                    }
+                }
+
+                tokens.push(Token::StringLiteral(string_content));
+            }
+
             '=' => push_token(Token::Equals, &mut tokens, &mut chars),
 
             '(' => push_token(Token::LParen, &mut tokens, &mut chars),
             ')' => push_token(Token::RParen, &mut tokens, &mut chars),
+
+            ':' => push_token(Token::Colon, &mut tokens, &mut chars),
             ';' => push_token(Token::Semicolon, &mut tokens, &mut chars),
 
             c if c.is_whitespace() || c == '\r' => {

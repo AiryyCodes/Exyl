@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expr, Program, Stmt},
+    ast::{Expr, Program, Stmt, Type},
     token::Token,
 };
 
@@ -72,17 +72,42 @@ impl Parser {
             }
         };
 
-        self.expect(&Token::Equals)?;
+        // check for optional type annotation
+        let ty = if let Some(Token::Colon) = self.peek() {
+            self.next(); // consume ':'
+            Some(self.parse_type()?) // you need a parse_type() function
+        } else {
+            None
+        };
+
+        self.expect(&Token::Equals)?; // expect '='
 
         let value = self.parse_expr()?;
 
-        Ok(Stmt::Let { name, value })
+        Ok(Stmt::Let { name, ty, value })
+    }
+
+    fn parse_type(&mut self) -> Result<Type, ParseError> {
+        match self.next() {
+            Some(Token::Identifier(type_name)) => match type_name.as_str() {
+                "i64" => Ok(Type::I64),
+                "f64" => Ok(Type::F64),
+                "void" => Ok(Type::Void),
+                other => Err(ParseError {
+                    message: format!("Unknown type '{}'", other),
+                }),
+            },
+            other => Err(ParseError {
+                message: format!("Expected type name, found {:?}", other),
+            }),
+        }
     }
 
     fn parse_expr(&mut self) -> Result<Expr, ParseError> {
         match self.next() {
             Some(Token::NumberInt(n)) => Ok(Expr::NumberInt(*n)),
             Some(Token::NumberFloat(f)) => Ok(Expr::NumberFloat(*f)),
+            Some(Token::StringLiteral(s)) => Ok(Expr::StringLiteral(s.clone())),
             Some(Token::Identifier(ident)) => {
                 let name = ident.clone();
                 if let Some(Token::LParen) = self.peek() {
