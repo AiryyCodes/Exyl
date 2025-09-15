@@ -1,3 +1,10 @@
+use inkwell::{
+    AddressSpace,
+    types::{BasicTypeEnum, VoidType},
+};
+
+use crate::codegen::CodeGen;
+
 #[derive(Debug, Clone)]
 pub struct Program {
     pub body: Vec<Stmt>,
@@ -10,6 +17,15 @@ pub enum Stmt {
         ty: Option<Type>,
         value: Expr,
     },
+    Func {
+        name: String,
+        return_type: Option<Type>,
+        inferred_return: Type,
+        arguments: Vec<(String, Type)>,
+        body: Option<Vec<Stmt>>,
+        is_extern: bool,
+    },
+    Return(Option<Expr>),
     Expr(Expr),
 }
 
@@ -43,4 +59,22 @@ pub enum Type {
     F64,
     String,
     Void,
+}
+
+pub enum ExylLLVMType<'ctx> {
+    Basic(BasicTypeEnum<'ctx>),
+    Void(VoidType<'ctx>),
+}
+
+impl<'ctx> CodeGen<'ctx> {
+    pub fn llvm_type(&self, ty: &Type) -> ExylLLVMType<'ctx> {
+        match ty {
+            Type::I64 => ExylLLVMType::Basic(self.context.i64_type().into()),
+            Type::F64 => ExylLLVMType::Basic(self.context.f64_type().into()),
+            Type::String => {
+                ExylLLVMType::Basic(self.context.ptr_type(AddressSpace::default()).into())
+            }
+            Type::Void => ExylLLVMType::Void(self.context.void_type()),
+        }
+    }
 }

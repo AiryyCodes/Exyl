@@ -1,6 +1,9 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Let,
+    Function,
+    Return,
+    Extern,
 
     Identifier(String),
 
@@ -9,9 +12,12 @@ pub enum Token {
     StringLiteral(String),
 
     Equals,
+    Divide,
 
     LParen,
     RParen,
+    LBrace,
+    RBrace,
 
     Colon,
     Semicolon,

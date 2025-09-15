@@ -7,6 +7,14 @@ pub struct ParseError {
     pub message: String,
 }
 
+impl ParseError {
+    pub fn new(message: &str) -> Self {
+        Self {
+            message: message.to_string(),
+        }
+    }
+}
+
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
@@ -42,20 +50,22 @@ impl Parser {
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
         let stmt = match self.peek() {
             Some(Token::Let) => self.parse_let()?,
+            Some(Token::Extern) | Some(Token::Function) => self.parse_function()?,
+            Some(Token::Return) => self.parse_return()?, // semicolon handled inside
             Some(_) => {
-                // fallback: expression as a statement
                 let expr = self.parse_expr()?;
                 Stmt::Expr(expr)
             }
-            None => {
-                return Err(ParseError {
-                    message: "Unexpected end of input".to_string(),
-                });
-            }
+            None => return Err(ParseError::new("Unexpected end of input")),
         };
 
-        // Require a semicolon after every statement
-        self.expect(&Token::Semicolon)?;
+        // Only require semicolon for expressions and let-statements
+        match &stmt {
+            Stmt::Expr(_) | Stmt::Let { .. } => {
+                self.expect(&Token::Semicolon)?;
+            }
+            _ => {} // Return, function, block statements do NOT require semicolon
+        }
 
         Ok(stmt)
     }
@@ -85,6 +95,95 @@ impl Parser {
         let value = self.parse_expr()?;
 
         Ok(Stmt::Let { name, ty, value })
+    }
+
+    fn parse_function(&mut self) -> Result<Stmt, ParseError> {
+        let mut is_extern = false;
+
+        if let Some(Token::Extern) = self.peek() {
+            self.next();
+            is_extern = true;
+        }
+
+        self.next(); // consume 'fun'
+
+        let name = match self.next() {
+            Some(Token::Identifier(ident)) => ident.clone(),
+            other => {
+                return Err(ParseError {
+                    message: format!("Expected identifier after fun, found {:?}", other),
+                });
+            }
+        };
+
+        self.expect(&Token::LParen)?;
+
+        let mut args: Vec<(String, Type)> = Vec::new();
+
+        while let Some(token) = self.peek() {
+            if let Token::RParen = token {
+                break;
+            }
+
+            let arg_name = if let Token::Identifier(ident) = self.next().unwrap() {
+                ident.clone()
+            } else {
+                return Err(ParseError::new("Expected identifier in parameter list"));
+            };
+
+            self.expect(&Token::Colon)?;
+            let ty = self.parse_type()?;
+            args.push((arg_name, ty));
+
+            if let Some(Token::Comma) = self.peek() {
+                self.next();
+            } else {
+                break;
+            }
+        }
+
+        self.expect(&Token::RParen)?;
+
+        let return_type = if let Some(Token::Colon) = self.peek() {
+            self.next();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        // Handle function declaration vs definition
+        let body = match self.peek() {
+            Some(Token::LBrace) => {
+                self.next(); // consume '{'
+                let mut stmts = Vec::new();
+                while let Some(token) = self.peek() {
+                    if let Token::RBrace = token {
+                        break;
+                    }
+                    stmts.push(self.parse_stmt()?);
+                }
+                self.expect(&Token::RBrace)?;
+                Some(stmts)
+            }
+            Some(Token::Semicolon) => {
+                self.next(); // consume ';'
+                None // function declaration
+            }
+            other => {
+                return Err(ParseError {
+                    message: format!("Expected function body '{{' or ';', found {:?}", other),
+                });
+            }
+        };
+
+        Ok(Stmt::Func {
+            name,
+            return_type,
+            inferred_return: Type::Void,
+            arguments: args,
+            body,
+            is_extern,
+        })
     }
 
     fn parse_type(&mut self) -> Result<Type, ParseError> {
@@ -148,6 +247,22 @@ impl Parser {
         self.expect(&Token::RParen)?;
 
         Ok(Expr::FunctionCall { name, args })
+    }
+
+    fn parse_return(&mut self) -> Result<Stmt, ParseError> {
+        self.next(); // consume 'return'
+
+        // Parse optional expression
+        let expr_opt = match self.peek() {
+            Some(&Token::Semicolon) => None,
+            Some(_) => Some(self.parse_expr()?),
+            None => return Err(ParseError::new("Unexpected end of input after return")),
+        };
+
+        // Consume semicolon that ends the return
+        self.expect(&Token::Semicolon)?;
+
+        Ok(Stmt::Return(expr_opt))
     }
 }
 

@@ -26,6 +26,9 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
 
                 let token = match ident.as_str() {
                     "let" => Token::Let,
+                    "fun" => Token::Function,
+                    "return" => Token::Return,
+                    "extern" => Token::Extern,
                     _ => Token::Identifier(ident),
                 };
                 tokens.push(token);
@@ -110,12 +113,51 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
 
             '(' => push_token(Token::LParen, &mut tokens, &mut chars),
             ')' => push_token(Token::RParen, &mut tokens, &mut chars),
+            '{' => push_token(Token::LBrace, &mut tokens, &mut chars),
+            '}' => push_token(Token::RBrace, &mut tokens, &mut chars),
 
             ':' => push_token(Token::Colon, &mut tokens, &mut chars),
             ';' => push_token(Token::Semicolon, &mut tokens, &mut chars),
+            ',' => push_token(Token::Comma, &mut tokens, &mut chars),
 
             c if c.is_whitespace() || c == '\r' => {
                 chars.next(); // Skip whitespace
+            }
+
+            // --- comments ---
+            '/' => {
+                chars.next(); // consume '/'
+                if let Some(&next_ch) = chars.peek() {
+                    match next_ch {
+                        '/' => {
+                            // line comment: skip until newline
+                            while let Some(&c) = chars.peek() {
+                                chars.next();
+                                if c == '\n' {
+                                    break;
+                                }
+                            }
+                        }
+                        '*' => {
+                            // block comment: skip until "*/"
+                            chars.next(); // consume '*'
+                            let mut last = '\0';
+                            while let Some(c) = chars.next() {
+                                if last == '*' && c == '/' {
+                                    break; // found closing */
+                                }
+                                last = c;
+                            }
+                        }
+                        _ => {
+                            // not actually a comment -> maybe it's division operator?
+                            tokens.push(Token::Divide);
+                        }
+                    }
+                } else {
+                    // just a single '/' at EOF
+                    tokens.push(Token::Divide);
+                }
             }
 
             _ => {

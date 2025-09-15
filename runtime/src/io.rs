@@ -1,7 +1,7 @@
 use std::ffi::{CStr, c_char};
 
 #[unsafe(no_mangle)]
-pub extern "C" fn print_string(s: *const c_char) {
+extern "C" fn print(s: *const c_char) {
     if s.is_null() {
         println!("(null)");
         return;
@@ -16,4 +16,9 @@ pub extern "C" fn print_string(s: *const c_char) {
             println!("Invalid UTF-8 string");
         }
     }
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn print_num(n: i64) {
+    println!("{}", n);
 }

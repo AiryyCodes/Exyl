@@ -8,9 +8,9 @@ use crate::{
 };
 
 mod ast;
-pub mod builtin;
 mod codegen;
 mod compile;
+pub mod function;
 mod lexer;
 mod parser;
 pub mod token;
@@ -20,7 +20,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.len() != 2 {
-        panic!("Usage:");
+        panic!("Usage: exylc <file>");
     }
 
     let file_path = &args[1];
@@ -52,9 +52,9 @@ fn main() {
     }
 
     let context = Context::create();
-    let codegen = CodeGen::new(&context, "main");
+    let mut codegen = CodeGen::new(&context, "main");
 
-    codegen.declare_print();
+    // codegen.declare_print();
 
     codegen.codegen_program(&typed_program);
 

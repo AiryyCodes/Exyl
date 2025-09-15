@@ -2,47 +2,37 @@ use std::collections::HashMap;
 
 use crate::{
     ast::{Expr, Program, Stmt, Type},
-    builtin::BuiltinFunction,
+    function::FunctionInfo,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
     UnknownVariable(String),
     UnknownFunction(String),
-    TypeMismatch {
-        expected: Type,
-        found: Type,
-    },
+    TypeMismatch { expected: Type, found: Type },
     ArgumentMismatch(String),
-    InvalidOperation {
-        operator: String,
-        left: Type,
-        right: Type,
-    },
-    CannotInferType(String),
-    Other(String),
+    ReturnOutsideFunction,
 }
 
 pub struct TypeChecker {
     pub variables: HashMap<String, Type>,
-    pub builtins: HashMap<String, BuiltinFunction>,
+    pub functions: HashMap<String, FunctionInfo>,
+
+    pub inside_function: bool,
 }
 
 impl TypeChecker {
     pub fn new() -> Self {
-        let mut builtins = HashMap::new();
-        builtins.insert(
+        let mut functions = HashMap::new();
+        functions.insert(
             "print".to_string(),
-            BuiltinFunction {
-                name: "print".to_string(),
-                param_types: vec![Type::String],
-                return_type: Type::Void,
-            },
+            FunctionInfo::new_builtin("print".to_string(), vec![Type::String], Type::Void),
         );
 
         Self {
             variables: HashMap::new(),
-            builtins,
+            functions,
+            inside_function: false,
         }
     }
 
@@ -63,6 +53,33 @@ impl TypeChecker {
     fn type_check_stmt(&mut self, stmt: Stmt) -> Result<Stmt, TypeError> {
         match stmt {
             Stmt::Let { name, ty, value } => self.type_check_let(name, ty, value),
+            Stmt::Func {
+                name,
+                return_type,
+                inferred_return,
+                arguments,
+                body,
+                is_extern,
+            } => self.type_check_func(
+                name,
+                return_type,
+                inferred_return,
+                arguments,
+                body,
+                is_extern,
+            ),
+            Stmt::Return(ret_opt) => {
+                if !self.inside_function {
+                    return Err(TypeError::ReturnOutsideFunction);
+                }
+
+                let typed_expr_opt = if let Some(expr) = ret_opt {
+                    Some(self.type_check_expr(expr)?)
+                } else {
+                    None
+                };
+                Ok(Stmt::Return(typed_expr_opt))
+            }
             Stmt::Expr(expr) => Ok(Stmt::Expr(self.type_check_expr(expr)?)),
         }
     }
@@ -100,11 +117,100 @@ impl TypeChecker {
         })
     }
 
+    fn type_check_func(
+        &mut self,
+        name: String,
+        return_type: Option<Type>,
+        _inferred_return: Type,
+        arguments: Vec<(String, Type)>,
+        body: Option<Vec<Stmt>>,
+        is_extern: bool,
+    ) -> Result<Stmt, TypeError> {
+        self.inside_function = true;
+
+        // 1. Arguments: nothing fancy yet, just trust parser
+        let arg_types = arguments.clone();
+
+        // 2. If body is present, check it
+        let inferred_return = if let Some(stmts) = &body {
+            let mut return_types: Vec<Type> = Vec::new();
+
+            for stmt in stmts {
+                self.type_check_stmt(stmt.clone())?; // type check each statement
+
+                // Collect return types
+                if let Stmt::Return(expr_opt) = stmt {
+                    let ty = if let Some(expr) = expr_opt {
+                        let typed_expr = self.type_check_expr(expr.clone())?;
+                        typed_expr.get_type().unwrap_or(Type::Void)
+                    } else {
+                        Type::Void
+                    };
+                    return_types.push(ty);
+                }
+            }
+
+            if return_types.is_empty() {
+                // No explicit return → Void
+                Type::Void
+            } else {
+                // Ensure all return types are consistent
+                let first = &return_types[0];
+                for other in &return_types[1..] {
+                    if other != first {
+                        return Err(TypeError::TypeMismatch {
+                            expected: first.clone(),
+                            found: other.clone(),
+                        });
+                    }
+                }
+                first.clone()
+            }
+        } else {
+            // Declaration only
+            return_type.clone().unwrap_or(Type::Void)
+        };
+
+        // 3. Validate return type
+        if let Some(declared) = &return_type {
+            if declared != &inferred_return {
+                return Err(TypeError::TypeMismatch {
+                    expected: declared.clone(),
+                    found: inferred_return,
+                });
+            }
+        }
+
+        let param_types = arg_types.clone().iter().map(|(_, ty)| ty.clone()).collect();
+
+        self.functions.insert(
+            name.clone(),
+            FunctionInfo::new_user(
+                name.clone(),
+                param_types,
+                return_type.clone(),
+                inferred_return.clone(),
+            ),
+        );
+
+        self.inside_function = false;
+
+        // 4. Return function statement
+        Ok(Stmt::Func {
+            name,
+            return_type: return_type.or(Some(inferred_return.clone())),
+            inferred_return,
+            arguments: arg_types,
+            body,
+            is_extern,
+        })
+    }
+
     // ----------------------------
     // Expression Checking
     // ----------------------------
 
-    pub fn type_check_expr(&mut self, expr: Expr) -> Result<Expr, TypeError> {
+    fn type_check_expr(&mut self, expr: Expr) -> Result<Expr, TypeError> {
         match expr {
             Expr::NumberInt(_) => Ok(Expr::Typed(Box::new(expr), Type::I64)),
             Expr::NumberFloat(_) => Ok(Expr::Typed(Box::new(expr), Type::F64)),
@@ -135,13 +241,13 @@ impl TypeChecker {
         args: Vec<Expr>,
     ) -> Result<Expr, TypeError> {
         // Clone function info
-        let (param_types, ret_type) = {
-            let func = self
-                .builtins
-                .get(&name)
-                .ok_or(TypeError::UnknownFunction(name.clone()))?;
-            (func.param_types.clone(), func.return_type.clone())
-        };
+        let func_info = self
+            .functions
+            .get(&name)
+            .ok_or(TypeError::UnknownFunction(name.clone()))?;
+
+        let param_types = func_info.param_types.clone();
+        let ret_type = func_info.inferred_return.clone();
 
         if args.len() != param_types.len() {
             return Err(TypeError::ArgumentMismatch(name.clone()));
