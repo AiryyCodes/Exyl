@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::{
     ast::{Expr, Program, Stmt, Type},
     function::FunctionInfo,
+    scope::ScopeStack,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -15,7 +16,7 @@ pub enum TypeError {
 }
 
 pub struct TypeChecker {
-    pub variables: HashMap<String, Type>,
+    pub scopes: ScopeStack<Type>,
     pub functions: HashMap<String, FunctionInfo>,
 
     pub inside_function: bool,
@@ -30,9 +31,9 @@ impl TypeChecker {
         );
 
         Self {
-            variables: HashMap::new(),
             functions,
             inside_function: false,
+            scopes: ScopeStack::new(),
         }
     }
 
@@ -80,6 +81,17 @@ impl TypeChecker {
                 };
                 Ok(Stmt::Return(typed_expr_opt))
             }
+            Stmt::Block(stmts) => {
+                self.scopes.push(); // push a new scope for the block
+
+                let mut typed_stmts = Vec::new();
+                for stmt in stmts {
+                    typed_stmts.push(self.type_check_stmt(stmt)?);
+                }
+
+                self.scopes.pop(); // pop the scope after block ends
+                Ok(Stmt::Block(typed_stmts))
+            }
             Stmt::Expr(expr) => Ok(Stmt::Expr(self.type_check_expr(expr)?)),
         }
     }
@@ -108,7 +120,9 @@ impl TypeChecker {
         };
 
         // Insert variable into type environment
-        self.variables.insert(name.clone(), var_type.clone());
+        self.scopes
+            .insert(name.clone(), var_type.clone())
+            .unwrap_or_else(|err| panic!("{}", err));
 
         Ok(Stmt::Let {
             name,
@@ -218,8 +232,8 @@ impl TypeChecker {
 
             Expr::Identifier(name) => {
                 let ty = self
-                    .variables
-                    .get(&name)
+                    .scopes
+                    .lookup(&name)
                     .ok_or(TypeError::UnknownVariable(name.clone()))?
                     .clone();
                 Ok(Expr::Typed(Box::new(Expr::Identifier(name)), ty))

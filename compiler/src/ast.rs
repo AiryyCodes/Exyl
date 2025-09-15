@@ -26,6 +26,7 @@ pub enum Stmt {
         is_extern: bool,
     },
     Return(Option<Expr>),
+    Block(Vec<Stmt>), // For nested scopes
     Expr(Expr),
 }
 

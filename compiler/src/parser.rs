@@ -52,6 +52,7 @@ impl Parser {
             Some(Token::Let) => self.parse_let()?,
             Some(Token::Extern) | Some(Token::Function) => self.parse_function()?,
             Some(Token::Return) => self.parse_return()?, // semicolon handled inside
+            Some(Token::LBrace) => self.parse_block()?,
             Some(_) => {
                 let expr = self.parse_expr()?;
                 Stmt::Expr(expr)
@@ -263,6 +264,19 @@ impl Parser {
         self.expect(&Token::Semicolon)?;
 
         Ok(Stmt::Return(expr_opt))
+    }
+
+    fn parse_block(&mut self) -> Result<Stmt, ParseError> {
+        self.next(); // consume '{'
+        let mut stmts = Vec::new();
+        while let Some(token) = self.peek() {
+            if let Token::RBrace = token {
+                break;
+            }
+            stmts.push(self.parse_stmt()?);
+        }
+        self.expect(&Token::RBrace)?;
+        Ok(Stmt::Block(stmts))
     }
 }
 

@@ -13,6 +13,7 @@ mod compile;
 pub mod function;
 mod lexer;
 mod parser;
+pub mod scope;
 pub mod token;
 mod type_checker;
 
@@ -53,8 +54,6 @@ fn main() {
 
     let context = Context::create();
     let mut codegen = CodeGen::new(&context, "main");
-
-    // codegen.declare_print();
 
     codegen.codegen_program(&typed_program);
 

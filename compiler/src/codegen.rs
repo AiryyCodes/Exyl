@@ -2,19 +2,21 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use inkwell::AddressSpace;
+use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType};
-use inkwell::values::{BasicMetadataValueEnum, FunctionValue};
-use inkwell::{builder::Builder, values::PointerValue};
+use inkwell::values::{BasicMetadataValueEnum, FunctionValue, PointerValue};
 
 use crate::ast::{Expr, ExylLLVMType, Program, Stmt, Type};
+use crate::scope::ScopeStack;
 
 pub struct CodeGen<'ctx> {
     pub context: &'ctx Context,
     pub module: Module<'ctx>,
     pub builder: Builder<'ctx>,
-    pub variables: RefCell<HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>)>>,
+
+    pub scopes: RefCell<ScopeStack<(PointerValue<'ctx>, BasicTypeEnum<'ctx>)>>,
     pub functions: RefCell<HashMap<String, (FunctionValue<'ctx>, ExylLLVMType<'ctx>)>>,
 
     pub current_func_has_return: bool,
@@ -27,14 +29,15 @@ impl<'ctx> CodeGen<'ctx> {
     pub fn new(context: &'ctx Context, name: &str) -> Self {
         let module = context.create_module(name);
         let builder = context.create_builder();
-        let variables = RefCell::new(HashMap::new());
+
+        let scopes = RefCell::new(ScopeStack::new());
         let functions = RefCell::new(HashMap::new());
 
         Self {
             context,
             module,
             builder,
-            variables,
+            scopes,
             functions,
             current_func_has_return: false,
             current_func_return_type: Type::Void,
@@ -95,9 +98,11 @@ impl<'ctx> CodeGen<'ctx> {
                 let init_val = self.codegen_expr(value);
                 let alloca = self.builder.build_alloca(llvm_type, &name).unwrap();
                 self.builder.build_store(alloca, init_val).unwrap();
-                self.variables
+
+                self.scopes
                     .borrow_mut()
-                    .insert(name.clone(), (alloca, llvm_type));
+                    .insert(name.clone(), (alloca, llvm_type))
+                    .unwrap_or_else(|err| panic!("{}", err));
 
                 None
             }
@@ -137,15 +142,19 @@ impl<'ctx> CodeGen<'ctx> {
                 // 4️⃣ Temporarily move builder to this function
                 self.builder.position_at_end(entry);
 
+                // Push new function scope
+                self.scopes.borrow_mut().push();
+
                 // 5️⃣ Allocate and store function parameters
                 for (i, (arg_name, arg_ty)) in arguments.iter().enumerate() {
                     let llvm_ty = self.llvm_var_type(arg_ty);
                     let alloca = self.builder.build_alloca(llvm_ty, arg_name).unwrap();
                     let param_val = function.get_nth_param(i as u32).unwrap();
                     let _ = self.builder.build_store(alloca, param_val);
-                    self.variables
+                    self.scopes
                         .borrow_mut()
-                        .insert(arg_name.clone(), (alloca, llvm_ty));
+                        .insert(arg_name.clone(), (alloca, llvm_ty))
+                        .unwrap_or_else(|err| panic!("{}", err));
                 }
 
                 // 6️⃣ Codegen the function body
@@ -176,6 +185,9 @@ impl<'ctx> CodeGen<'ctx> {
                     .borrow_mut()
                     .insert(name.clone(), (function, self.llvm_type(inferred_return)));
 
+                // Pop function scope
+                self.scopes.borrow_mut().pop();
+
                 self.inside_function = false;
 
                 Some(function)
@@ -198,6 +210,20 @@ impl<'ctx> CodeGen<'ctx> {
                 }
 
                 self.current_func_has_return = true;
+                None
+            }
+            Stmt::Block(stmts) => {
+                // Push a new nested scope
+                self.scopes.borrow_mut().push();
+
+                // Codegen each statement inside the block
+                for stmt in stmts {
+                    self.codegen_stmt(stmt);
+                }
+
+                // Pop the block scope
+                self.scopes.borrow_mut().pop();
+
                 None
             }
             _ => unimplemented!(),
@@ -226,11 +252,11 @@ impl<'ctx> CodeGen<'ctx> {
                 global_str.as_pointer_value().into()
             }
             Expr::Identifier(name) => {
-                let variables = self.variables.borrow();
+                let variables = self.scopes.borrow();
                 let (var_ptr, ty) = variables
-                    .get(name)
-                    .unwrap_or_else(|| panic!("Undefined variable {}", name));
-                self.builder.build_load(*ty, *var_ptr, name).unwrap().into()
+                    .lookup(name)
+                    .unwrap_or_else(|| panic!("Undefined symbol {}", name));
+                self.builder.build_load(ty, var_ptr, name).unwrap().into()
             }
             Expr::FunctionCall { name, args } => {
                 // Lookup function
