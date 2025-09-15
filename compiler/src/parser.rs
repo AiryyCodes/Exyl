@@ -53,6 +53,9 @@ impl Parser {
             Some(Token::Extern) | Some(Token::Function) => self.parse_function()?,
             Some(Token::Return) => self.parse_return()?, // semicolon handled inside
             Some(Token::LBrace) => self.parse_block()?,
+
+            Some(Token::If) => self.parse_if()?,
+
             Some(_) => {
                 let expr = self.parse_expr()?;
                 Stmt::Expr(expr)
@@ -191,8 +194,13 @@ impl Parser {
         match self.next() {
             Some(Token::Identifier(type_name)) => match type_name.as_str() {
                 "i64" => Ok(Type::I64),
+
                 "f64" => Ok(Type::F64),
+
+                "bool" => Ok(Type::Bool),
+
                 "string" => Ok(Type::String),
+
                 "void" => Ok(Type::Void),
                 other => Err(ParseError {
                     message: format!("Unknown type '{}'", other),
@@ -208,7 +216,12 @@ impl Parser {
         match self.next() {
             Some(Token::NumberInt(n)) => Ok(Expr::NumberInt(*n)),
             Some(Token::NumberFloat(f)) => Ok(Expr::NumberFloat(*f)),
+
+            Some(Token::True) => Ok(Expr::BoolLiteral(true)),
+            Some(Token::False) => Ok(Expr::BoolLiteral(false)),
+
             Some(Token::StringLiteral(s)) => Ok(Expr::StringLiteral(s.clone())),
+
             Some(Token::Identifier(ident)) => {
                 let name = ident.clone();
                 if let Some(Token::LParen) = self.peek() {
@@ -268,15 +281,52 @@ impl Parser {
 
     fn parse_block(&mut self) -> Result<Stmt, ParseError> {
         self.next(); // consume '{'
+
         let mut stmts = Vec::new();
+
         while let Some(token) = self.peek() {
             if let Token::RBrace = token {
                 break;
             }
             stmts.push(self.parse_stmt()?);
         }
+
         self.expect(&Token::RBrace)?;
+
         Ok(Stmt::Block(stmts))
+    }
+
+    fn parse_if(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(&Token::If)?; // consume 'if'
+
+        self.expect(&Token::LParen)?;
+        let condition = self.parse_expr()?;
+        self.expect(&Token::RParen)?;
+
+        // Parse then-branch
+        let then_branch = if let Some(Token::LBrace) = self.peek() {
+            self.parse_block()? // parse a block `{ ... }` returning Stmt::Block
+        } else {
+            self.parse_stmt()? // single statement
+        };
+
+        // Optional else-branch
+        let else_branch = if let Some(Token::Else) = self.peek() {
+            self.next(); // consume 'else'
+            Some(Box::new(if let Some(Token::LBrace) = self.peek() {
+                self.parse_block()?
+            } else {
+                self.parse_stmt()?
+            }))
+        } else {
+            None
+        };
+
+        Ok(Stmt::If {
+            condition,
+            then_branch: Box::new(then_branch),
+            else_branch,
+        })
     }
 }
 

@@ -5,6 +5,12 @@ pub enum Token {
     Return,
     Extern,
 
+    If,
+    Else,
+
+    True,
+    False,
+
     Identifier(String),
 
     NumberInt(i64),

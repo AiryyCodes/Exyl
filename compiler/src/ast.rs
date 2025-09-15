@@ -27,6 +27,11 @@ pub enum Stmt {
     },
     Return(Option<Expr>),
     Block(Vec<Stmt>), // For nested scopes
+    If {
+        condition: Expr,
+        then_branch: Box<Stmt>,
+        else_branch: Option<Box<Stmt>>,
+    },
     Expr(Expr),
 }
 
@@ -34,6 +39,7 @@ pub enum Stmt {
 pub enum Expr {
     NumberInt(i64),
     NumberFloat(f64),
+    BoolLiteral(bool),
     StringLiteral(String),
     Identifier(String),
     FunctionCall { name: String, args: Vec<Expr> },
@@ -46,6 +52,7 @@ impl Expr {
         match self {
             Expr::NumberInt(_) => Some(Type::I64),
             Expr::NumberFloat(_) => Some(Type::F64),
+            Expr::BoolLiteral(_) => Some(Type::Bool),
             Expr::StringLiteral(_) => Some(Type::String),
             Expr::Identifier(_) => None, // only known after type check
             Expr::FunctionCall { .. } => None, // only known after type check
@@ -58,6 +65,7 @@ impl Expr {
 pub enum Type {
     I64,
     F64,
+    Bool,
     String,
     Void,
 }
@@ -72,6 +80,7 @@ impl<'ctx> CodeGen<'ctx> {
         match ty {
             Type::I64 => ExylLLVMType::Basic(self.context.i64_type().into()),
             Type::F64 => ExylLLVMType::Basic(self.context.f64_type().into()),
+            Type::Bool => ExylLLVMType::Basic(self.context.bool_type().into()),
             Type::String => {
                 ExylLLVMType::Basic(self.context.ptr_type(AddressSpace::default()).into())
             }

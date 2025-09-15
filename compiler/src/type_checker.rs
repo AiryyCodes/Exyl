@@ -92,6 +92,31 @@ impl TypeChecker {
                 self.scopes.pop(); // pop the scope after block ends
                 Ok(Stmt::Block(typed_stmts))
             }
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let cond_typed = self.type_check_expr(condition)?;
+                if cond_typed.get_type() != Some(Type::Bool) {
+                    return Err(TypeError::TypeMismatch {
+                        expected: Type::Bool,
+                        found: cond_typed.get_type().unwrap(),
+                    });
+                }
+
+                let then_checked = Box::new(self.type_check_stmt(*then_branch)?);
+                let else_checked = match else_branch {
+                    Some(else_stmt) => Some(Box::new(self.type_check_stmt(*else_stmt)?)),
+                    None => None,
+                };
+
+                Ok(Stmt::If {
+                    condition: cond_typed,
+                    then_branch: then_checked,
+                    else_branch: else_checked,
+                })
+            }
             Stmt::Expr(expr) => Ok(Stmt::Expr(self.type_check_expr(expr)?)),
         }
     }
@@ -228,6 +253,9 @@ impl TypeChecker {
         match expr {
             Expr::NumberInt(_) => Ok(Expr::Typed(Box::new(expr), Type::I64)),
             Expr::NumberFloat(_) => Ok(Expr::Typed(Box::new(expr), Type::F64)),
+
+            Expr::BoolLiteral(_) => Ok(Expr::Typed(Box::new(expr), Type::Bool)),
+
             Expr::StringLiteral(_) => Ok(Expr::Typed(Box::new(expr), Type::String)),
 
             Expr::Identifier(name) => {

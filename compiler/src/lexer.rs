@@ -29,6 +29,13 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
                     "fun" => Token::Function,
                     "return" => Token::Return,
                     "extern" => Token::Extern,
+
+                    "if" => Token::If,
+                    "else" => Token::Else,
+
+                    "true" => Token::True,
+                    "false" => Token::False,
+
                     _ => Token::Identifier(ident),
                 };
                 tokens.push(token);

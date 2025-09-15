@@ -1,12 +1,12 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use inkwell::AddressSpace;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType};
 use inkwell::values::{BasicMetadataValueEnum, FunctionValue, PointerValue};
+use inkwell::{AddressSpace, IntPredicate};
 
 use crate::ast::{Expr, ExylLLVMType, Program, Stmt, Type};
 use crate::scope::ScopeStack;
@@ -226,6 +226,60 @@ impl<'ctx> CodeGen<'ctx> {
 
                 None
             }
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                // Generate condition
+                let cond_val = self.codegen_expr(&condition); // i1 now
+                let cond_val = cond_val.into_int_value();
+
+                let func = self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
+
+                // Create basic blocks
+                let then_bb = self.context.append_basic_block(func, "then");
+                let merge_bb = self.context.append_basic_block(func, "ifcont");
+                let else_bb = else_branch
+                    .as_ref()
+                    .map(|_| self.context.append_basic_block(func, "else"));
+
+                // Build conditional branch directly with i1
+                match else_bb {
+                    Some(ref else_block) => {
+                        let _ =
+                            self.builder
+                                .build_conditional_branch(cond_val, then_bb, *else_block);
+                    }
+                    None => {
+                        let _ = self
+                            .builder
+                            .build_conditional_branch(cond_val, then_bb, merge_bb);
+                    }
+                }
+
+                // Then block
+                self.builder.position_at_end(then_bb);
+                self.codegen_stmt(then_branch);
+                let _ = self.builder.build_unconditional_branch(merge_bb);
+
+                // Else block
+                if let Some(else_block) = else_branch {
+                    self.builder.position_at_end(else_bb.unwrap());
+                    self.codegen_stmt(&else_block);
+                    let _ = self.builder.build_unconditional_branch(merge_bb);
+                }
+
+                // Continue after if
+                self.builder.position_at_end(merge_bb);
+
+                None
+            }
             _ => unimplemented!(),
         }
     }
@@ -283,6 +337,7 @@ impl<'ctx> CodeGen<'ctx> {
                     ExylLLVMType::Void(_) => self.context.i64_type().const_zero().into(),
                 }
             }
+            Expr::BoolLiteral(b) => self.context.bool_type().const_int(*b as u64, false).into(),
             Expr::Typed(inner, _ty) => self.codegen_expr(inner),
             _ => unimplemented!(),
         }
@@ -292,6 +347,7 @@ impl<'ctx> CodeGen<'ctx> {
         match ty {
             Type::I64 => self.context.i64_type().into(),
             Type::F64 => self.context.f64_type().into(),
+            Type::Bool => self.context.bool_type().into(),
             Type::String => self.context.ptr_type(AddressSpace::default()).into(),
             Type::Void => panic!("Cannot generate LLVM type for void"),
         }
