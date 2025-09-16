@@ -1,11 +1,14 @@
+#include <stddef.h>
+#include <stdarg.h>
 #include <stdio.h>
 
-void print(const char *str)
+void print(const char *format, ...)
 {
-    printf("%s\n", str);
-}
+    va_list args;
+    va_start(args, format);
 
-void print_num(int num)
-{
-    printf("%i\n", num);
+    vprintf(format, args);
+    putchar('\n');
+
+    va_end(args);
 }

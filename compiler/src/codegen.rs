@@ -113,11 +113,15 @@ impl<'ctx> CodeGen<'ctx> {
                 arguments,
                 body,
                 is_extern,
+                is_variadic,
             } => {
                 // 1️⃣ Build function type
                 let param_types: Vec<Type> = arguments.iter().map(|(_, ty)| ty.clone()).collect();
-                let fn_type = self
-                    .llvm_function_type(return_type.as_ref().unwrap_or(&Type::Void), &param_types);
+                let fn_type = self.llvm_function_type(
+                    return_type.as_ref().unwrap_or(&Type::Void),
+                    &param_types,
+                    *is_variadic,
+                );
 
                 // 2️⃣ Add function to module
                 let function = self.module.add_function(name, fn_type, None);
@@ -651,7 +655,12 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn llvm_function_type(&self, ret_ty: &Type, param_tys: &[Type]) -> FunctionType<'ctx> {
+    fn llvm_function_type(
+        &self,
+        ret_ty: &Type,
+        param_tys: &[Type],
+        is_variadic: bool,
+    ) -> FunctionType<'ctx> {
         let llvm_param_tys: Vec<BasicMetadataTypeEnum> = param_tys
             .iter()
             .map(|ty| match self.llvm_type(ty) {
@@ -661,8 +670,8 @@ impl<'ctx> CodeGen<'ctx> {
             .collect();
 
         match self.llvm_type(ret_ty) {
-            ExylLLVMType::Basic(b) => b.fn_type(&llvm_param_tys, false),
-            ExylLLVMType::Void(v) => v.fn_type(&llvm_param_tys, false),
+            ExylLLVMType::Basic(b) => b.fn_type(&llvm_param_tys, is_variadic),
+            ExylLLVMType::Void(v) => v.fn_type(&llvm_param_tys, is_variadic),
         }
     }
 }

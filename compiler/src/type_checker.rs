@@ -30,7 +30,7 @@ impl TypeChecker {
         let mut functions = HashMap::new();
         functions.insert(
             "print".to_string(),
-            FunctionInfo::new_builtin("print".to_string(), vec![Type::String], Type::Void),
+            FunctionInfo::new_builtin("print".to_string(), vec![Type::String], Type::Void, true),
         );
 
         Self {
@@ -64,6 +64,7 @@ impl TypeChecker {
                 arguments,
                 body,
                 is_extern,
+                is_variadic,
             } => self.type_check_func(
                 name,
                 return_type,
@@ -71,6 +72,7 @@ impl TypeChecker {
                 arguments,
                 body,
                 is_extern,
+                is_variadic,
             ),
             Stmt::Return(ret_opt) => {
                 if !self.inside_function {
@@ -167,6 +169,7 @@ impl TypeChecker {
         arguments: Vec<(String, Type)>,
         body: Option<Vec<Stmt>>,
         is_extern: bool,
+        is_variadic: bool,
     ) -> Result<Stmt, TypeError> {
         self.inside_function = true;
 
@@ -238,6 +241,7 @@ impl TypeChecker {
                 param_types,
                 return_type.clone(),
                 inferred_return.clone(),
+                is_variadic,
             ),
         );
 
@@ -253,6 +257,7 @@ impl TypeChecker {
             arguments: arg_types,
             body,
             is_extern,
+            is_variadic,
         })
     }
 
@@ -417,8 +422,11 @@ impl TypeChecker {
         let param_types = func_info.param_types.clone();
         let ret_type = func_info.inferred_return.clone();
 
-        if args.len() != param_types.len() {
-            return Err(TypeError::ArgumentMismatch(name.clone()));
+        if !func_info.is_variadic && args.len() != func_info.param_types.len() {
+            return Err(TypeError::ArgumentMismatch(func_info.name.clone()));
+        }
+        if func_info.is_variadic && args.len() < func_info.param_types.len() {
+            return Err(TypeError::ArgumentMismatch(func_info.name.clone())); // too few fixed args
         }
 
         // Type check each argument, inferring if needed

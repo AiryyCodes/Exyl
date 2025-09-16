@@ -123,12 +123,26 @@ impl Parser {
         self.expect(&Token::LParen)?;
 
         let mut args: Vec<(String, Type)> = Vec::new();
+        let mut is_variadic = false;
 
         while let Some(token) = self.peek() {
             if let Token::RParen = token {
                 break;
             }
 
+            // Check for variadic "..."
+            if let Token::DotDotDot = token {
+                self.next(); // consume ...
+                is_variadic = true;
+
+                // variadic must be last
+                if let Some(Token::Comma) = self.peek() {
+                    return Err(ParseError::new("Variadic parameter must be last"));
+                }
+                break;
+            }
+
+            // Normal argument
             let arg_name = if let Token::Identifier(ident) = self.next().unwrap() {
                 ident.clone()
             } else {
@@ -187,6 +201,7 @@ impl Parser {
             arguments: args,
             body,
             is_extern,
+            is_variadic,
         })
     }
 

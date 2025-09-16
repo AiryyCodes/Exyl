@@ -24,6 +24,7 @@ pub enum Stmt {
         arguments: Vec<(String, Type)>,
         body: Option<Vec<Stmt>>,
         is_extern: bool,
+        is_variadic: bool,
     },
     Return(Option<Expr>),
     Block(Vec<Stmt>), // For nested scopes

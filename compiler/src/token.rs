@@ -45,4 +45,7 @@ pub enum Token {
     Colon,
     Semicolon,
     Comma,
+    Dot,
+
+    DotDotDot, // Variadic arguments
 }

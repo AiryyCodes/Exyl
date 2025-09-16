@@ -41,6 +41,31 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
                 tokens.push(token);
             }
 
+            '.' => {
+                let mut iter = chars.clone();
+                iter.next(); // skip first dot
+
+                if let Some(&next1) = iter.peek() {
+                    if next1 == '.' {
+                        iter.next();
+                        if let Some(&next2) = iter.peek() {
+                            if next2 == '.' {
+                                // Got "..."
+                                chars.next();
+                                chars.next();
+                                chars.next(); // consume all three
+                                tokens.push(Token::DotDotDot);
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                // Otherwise just a single dot
+                chars.next();
+                tokens.push(Token::Dot);
+            }
+
             '0'..='9' | '.' => {
                 let mut number = String::new();
                 let mut has_dot = false;
@@ -51,30 +76,37 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
                         chars.next();
                     } else if c == '.' && !has_dot {
                         has_dot = true;
-                        number.push(c);
+                        number.push('.');
                         chars.next();
                     } else {
                         break;
                     }
                 }
 
-                if number.starts_with('.') {
-                    number.insert(0, '0');
-                }
-                if number.ends_with('.') {
-                    number.push('0');
-                }
-
-                if has_dot {
-                    let value = number.parse::<f64>().map_err(|err| LexError {
-                        message: format!("Invalid number '{}': {}", number, err),
-                    })?;
-                    tokens.push(Token::NumberFloat(value));
+                // Handle leading/trailing dot
+                if number == "." {
+                    // single dot, could be tokenized separately as Dot token
+                    tokens.push(Token::Dot);
+                    chars.next(); // consume
                 } else {
-                    let value = number.parse::<i64>().map_err(|err| LexError {
-                        message: format!("Invalid number '{}': {}", number, err),
-                    })?;
-                    tokens.push(Token::NumberInt(value));
+                    if number.starts_with('.') {
+                        number.insert(0, '0');
+                    }
+                    if number.ends_with('.') {
+                        number.push('0');
+                    }
+
+                    if has_dot {
+                        let value = number.parse::<f64>().map_err(|err| LexError {
+                            message: format!("Invalid float '{}': {}", number, err),
+                        })?;
+                        tokens.push(Token::NumberFloat(value));
+                    } else {
+                        let value = number.parse::<i64>().map_err(|err| LexError {
+                            message: format!("Invalid int '{}': {}", number, err),
+                        })?;
+                        tokens.push(Token::NumberInt(value));
+                    }
                 }
             }
 

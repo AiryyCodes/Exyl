@@ -1,5 +1,4 @@
-extern fun print(str: string): void;
-extern fun print_num(num: i64): void;
+extern fun print(format: string, ...): void;
 
 fun add(a: i64, b: i64): i64 {
   return a + b;
@@ -27,7 +26,7 @@ fun main() {
   let x1: f64 = 1.0;
   let y1: f64 = (x1 + 2.0);
 
-  // print_num(x1);
+  print("%f", x1);
 
   if (x1 == y1 || !cond3) {
     print("If condition is true");
@@ -35,7 +34,9 @@ fun main() {
     print("If condition is false");
   }
 
-  print_num(test(2, 4, 6));
+  print("%i", test(2, 4, 6));
+
+  print("Sum: %i", add(1, 1));
 
   return x;
 }
