@@ -42,7 +42,21 @@ pub enum Expr {
     BoolLiteral(bool),
     StringLiteral(String),
     Identifier(String),
-    FunctionCall { name: String, args: Vec<Expr> },
+    FunctionCall {
+        name: String,
+        args: Vec<Expr>,
+    },
+
+    Binary {
+        op: BinaryOp,
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+
+    Unary {
+        op: UnaryOp,
+        expr: Box<Expr>,
+    },
 
     Typed(Box<Expr>, Type),
 }
@@ -56,9 +70,56 @@ impl Expr {
             Expr::StringLiteral(_) => Some(Type::String),
             Expr::Identifier(_) => None, // only known after type check
             Expr::FunctionCall { .. } => None, // only known after type check
+
+            Expr::Binary { op, left, right } => match (left.get_type(), right.get_type()) {
+                (Some(Type::I64), Some(Type::I64)) => Some(Type::I64),
+                (Some(Type::F64), Some(Type::F64)) => Some(Type::F64),
+                (Some(Type::Bool), Some(Type::Bool))
+                    if matches!(
+                        op,
+                        BinaryOp::Equal
+                            | BinaryOp::NotEqual
+                            | BinaryOp::LessThan
+                            | BinaryOp::LessThanOrEqual
+                            | BinaryOp::GreaterThan
+                            | BinaryOp::GreaterThanOrEqual
+                    ) =>
+                {
+                    Some(Type::Bool)
+                }
+                _ => None,
+            },
+
+            Expr::Unary { .. } => None,
+
             Expr::Typed(_, ty) => Some(ty.clone()),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum BinaryOp {
+    Add,      // +
+    Subtract, // -
+    Multiply, // *
+    Divide,   // /
+    Modulo,   // %
+
+    Equal,              // ==
+    NotEqual,           // !=
+    LessThan,           // <
+    LessThanOrEqual,    // <=
+    GreaterThan,        // >
+    GreaterThanOrEqual, // >=
+
+    LogicalAnd, // &&
+    LogicalOr,  // ||
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum UnaryOp {
+    Not,    // !
+    Negate, // - for numbers
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -68,6 +129,20 @@ pub enum Type {
     Bool,
     String,
     Void,
+}
+
+impl Type {
+    pub fn is_numeric(&self) -> bool {
+        matches!(self, Type::I64 | Type::F64)
+    }
+
+    pub fn is_integer(&self) -> bool {
+        matches!(self, Type::I64)
+    }
+
+    pub fn is_float(&self) -> bool {
+        matches!(self, Type::F64)
+    }
 }
 
 pub enum ExylLLVMType<'ctx> {

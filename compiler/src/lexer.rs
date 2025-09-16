@@ -116,7 +116,66 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
                 tokens.push(Token::StringLiteral(string_content));
             }
 
-            '=' => push_token(Token::Equals, &mut tokens, &mut chars),
+            '+' => push_token(Token::Plus, &mut tokens, &mut chars),
+            '-' => push_token(Token::Minus, &mut tokens, &mut chars),
+            '*' => push_token(Token::Star, &mut tokens, &mut chars),
+            '%' => push_token(Token::Modulo, &mut tokens, &mut chars),
+
+            '=' => {
+                chars.next();
+                if let Some(&'=') = chars.peek() {
+                    chars.next();
+                    tokens.push(Token::EqualEqual);
+                } else {
+                    tokens.push(Token::Equals);
+                }
+            }
+
+            '!' => {
+                chars.next();
+                if let Some(&'=') = chars.peek() {
+                    chars.next();
+                    tokens.push(Token::BangEqual);
+                } else {
+                    tokens.push(Token::Bang); // maybe later for logical NOT
+                }
+            }
+
+            '<' => {
+                chars.next();
+                if let Some(&'=') = chars.peek() {
+                    chars.next();
+                    tokens.push(Token::LessEqual);
+                } else {
+                    tokens.push(Token::Less);
+                }
+            }
+
+            '>' => {
+                chars.next();
+                if let Some(&'=') = chars.peek() {
+                    chars.next();
+                    tokens.push(Token::GreaterEqual);
+                } else {
+                    tokens.push(Token::Greater);
+                }
+            }
+
+            '&' => {
+                chars.next();
+                if let Some(&'&') = chars.peek() {
+                    chars.next();
+                    tokens.push(Token::AndAnd);
+                }
+            }
+
+            '|' => {
+                chars.next();
+                if let Some(&'|') = chars.peek() {
+                    chars.next();
+                    tokens.push(Token::OrOr);
+                }
+            }
 
             '(' => push_token(Token::LParen, &mut tokens, &mut chars),
             ')' => push_token(Token::RParen, &mut tokens, &mut chars),

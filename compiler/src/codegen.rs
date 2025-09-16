@@ -5,10 +5,10 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType};
-use inkwell::values::{BasicMetadataValueEnum, FunctionValue, PointerValue};
-use inkwell::{AddressSpace, IntPredicate};
+use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PointerValue};
+use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 
-use crate::ast::{Expr, ExylLLVMType, Program, Stmt, Type};
+use crate::ast::{BinaryOp, Expr, ExylLLVMType, Program, Stmt, Type, UnaryOp};
 use crate::scope::ScopeStack;
 
 pub struct CodeGen<'ctx> {
@@ -338,9 +338,307 @@ impl<'ctx> CodeGen<'ctx> {
                 }
             }
             Expr::BoolLiteral(b) => self.context.bool_type().const_int(*b as u64, false).into(),
+
+            Expr::Binary { op, left, right } => {
+                let left_val = self.codegen_expr(left);
+                let right_val = self.codegen_expr(right);
+
+                // Check if it's integer or float
+                match left_val {
+                    BasicValueEnum::IntValue(left_int) => {
+                        let right_int = right_val.into_int_value();
+                        match op {
+                            BinaryOp::Add => self
+                                .builder
+                                .build_int_add(left_int, right_int, "add")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Subtract => self
+                                .builder
+                                .build_int_sub(left_int, right_int, "sub")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Multiply => self
+                                .builder
+                                .build_int_mul(left_int, right_int, "mul")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Divide => self
+                                .builder
+                                .build_int_signed_div(left_int, right_int, "div")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Modulo => self
+                                .builder
+                                .build_int_signed_rem(left_int, right_int, "mod")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Equal => self
+                                .builder
+                                .build_int_compare(IntPredicate::EQ, left_int, right_int, "eq")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::NotEqual => self
+                                .builder
+                                .build_int_compare(IntPredicate::NE, left_int, right_int, "neq")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::LessThan => self
+                                .builder
+                                .build_int_compare(IntPredicate::SLT, left_int, right_int, "lt")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::LessThanOrEqual => self
+                                .builder
+                                .build_int_compare(IntPredicate::SLE, left_int, right_int, "le")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::GreaterThan => self
+                                .builder
+                                .build_int_compare(IntPredicate::SGT, left_int, right_int, "gt")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::GreaterThanOrEqual => self
+                                .builder
+                                .build_int_compare(IntPredicate::SGE, left_int, right_int, "ge")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::LogicalAnd | BinaryOp::LogicalOr => self.build_logical(
+                                op.clone(),
+                                inkwell::values::BasicValueEnum::IntValue(left_int),
+                                inkwell::values::BasicValueEnum::IntValue(right_int),
+                            ),
+                        }
+                    }
+                    BasicValueEnum::FloatValue(left_float) => {
+                        let right_float = right_val.into_float_value();
+                        match op {
+                            BinaryOp::Add => self
+                                .builder
+                                .build_float_add(left_float, right_float, "add")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Subtract => self
+                                .builder
+                                .build_float_sub(left_float, right_float, "sub")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Multiply => self
+                                .builder
+                                .build_float_mul(left_float, right_float, "mul")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Divide => self
+                                .builder
+                                .build_float_div(left_float, right_float, "div")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Equal => self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OEQ,
+                                    left_float,
+                                    right_float,
+                                    "eq",
+                                )
+                                .unwrap()
+                                .into(),
+                            BinaryOp::NotEqual => self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::ONE,
+                                    left_float,
+                                    right_float,
+                                    "neq",
+                                )
+                                .unwrap()
+                                .into(),
+                            BinaryOp::LessThan => self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OLT,
+                                    left_float,
+                                    right_float,
+                                    "lt",
+                                )
+                                .unwrap()
+                                .into(),
+                            BinaryOp::LessThanOrEqual => self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OLE,
+                                    left_float,
+                                    right_float,
+                                    "le",
+                                )
+                                .unwrap()
+                                .into(),
+                            BinaryOp::GreaterThan => self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OGT,
+                                    left_float,
+                                    right_float,
+                                    "gt",
+                                )
+                                .unwrap()
+                                .into(),
+                            BinaryOp::GreaterThanOrEqual => self
+                                .builder
+                                .build_float_compare(
+                                    FloatPredicate::OGE,
+                                    left_float,
+                                    right_float,
+                                    "ge",
+                                )
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Modulo => {
+                                // Get or declare the fmod function
+                                let fmod_fn =
+                                    self.module.get_function("fmod").unwrap_or_else(|| {
+                                        let f64_type = self.context.f64_type();
+                                        let fn_type = f64_type
+                                            .fn_type(&[f64_type.into(), f64_type.into()], false);
+                                        self.module.add_function(
+                                            "fmod",
+                                            fn_type,
+                                            Some(inkwell::module::Linkage::External),
+                                        )
+                                    });
+
+                                let call_site = self
+                                    .builder
+                                    .build_call(
+                                        fmod_fn,
+                                        &[
+                                            left_val.into_float_value().into(),
+                                            right_val.into_float_value().into(),
+                                        ],
+                                        "fmod",
+                                    )
+                                    .unwrap();
+
+                                call_site.try_as_basic_value().left().unwrap()
+                            }
+                            BinaryOp::LogicalAnd | BinaryOp::LogicalOr => {
+                                panic!("Logical operators should not be applied to floats");
+                            }
+                        }
+                    }
+                    _ => panic!("Unsupported binary operand type"),
+                }
+            }
+
+            Expr::Unary { op, expr } => {
+                let val = self.codegen_expr(expr);
+                match op {
+                    UnaryOp::Not => {
+                        let int_val = val.into_int_value();
+                        let zero = self.context.bool_type().const_int(0, false);
+                        self.builder
+                            .build_int_compare(IntPredicate::EQ, int_val, zero, "not")
+                            .unwrap()
+                            .into()
+                    }
+                    UnaryOp::Negate => match val {
+                        BasicValueEnum::IntValue(i) => {
+                            self.builder.build_int_neg(i, "neg").unwrap().into()
+                        }
+                        BasicValueEnum::FloatValue(f) => {
+                            self.builder.build_float_neg(f, "neg").unwrap().into()
+                        }
+                        _ => panic!("Unsupported type for unary negate"),
+                    },
+                }
+            }
+
             Expr::Typed(inner, _ty) => self.codegen_expr(inner),
             _ => unimplemented!(),
         }
+    }
+
+    pub fn build_logical(
+        &self,
+        op: BinaryOp,
+        left_val: inkwell::values::BasicValueEnum<'ctx>,
+        right_val: inkwell::values::BasicValueEnum<'ctx>,
+    ) -> inkwell::values::BasicValueEnum<'ctx> {
+        let func = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+
+        let lhs_block = self.builder.get_insert_block().unwrap();
+        let rhs_block = self.context.append_basic_block(func, "logical_rhs");
+        let merge_block = self.context.append_basic_block(func, "logical_merge");
+
+        // Convert left to bool
+        let left_bool = self
+            .builder
+            .build_int_compare(
+                IntPredicate::NE,
+                left_val.into_int_value(),
+                self.context.bool_type().const_int(0, false),
+                "left_bool",
+            )
+            .unwrap();
+
+        match op {
+            BinaryOp::LogicalAnd => {
+                // AND: if left true, evaluate right; else jump to merge (false)
+                self.builder
+                    .build_conditional_branch(left_bool, rhs_block, merge_block);
+            }
+            BinaryOp::LogicalOr => {
+                // OR: if left true, jump to merge (true); else evaluate right
+                self.builder
+                    .build_conditional_branch(left_bool, merge_block, rhs_block);
+            }
+            _ => unreachable!(),
+        }
+
+        // RHS block
+        self.builder.position_at_end(rhs_block);
+        let right_bool = self
+            .builder
+            .build_int_compare(
+                IntPredicate::NE,
+                right_val.into_int_value(),
+                self.context.bool_type().const_int(0, false),
+                "right_bool",
+            )
+            .unwrap();
+        self.builder.build_unconditional_branch(merge_block);
+
+        // Merge block
+        self.builder.position_at_end(merge_block);
+        let phi = self
+            .builder
+            .build_phi(self.context.bool_type(), "logical_phi")
+            .unwrap();
+
+        match op {
+            BinaryOp::LogicalAnd => {
+                // AND: false if left was false, right if left true
+                phi.add_incoming(&[
+                    (&self.context.bool_type().const_int(0, false), lhs_block),
+                    (&right_bool, rhs_block),
+                ]);
+            }
+            BinaryOp::LogicalOr => {
+                // OR: true if left was true, right if left false
+                phi.add_incoming(&[
+                    (&self.context.bool_type().const_int(1, false), lhs_block),
+                    (&right_bool, rhs_block),
+                ]);
+            }
+            _ => unreachable!(),
+        }
+
+        phi.as_basic_value().into()
     }
 
     pub fn llvm_var_type(&self, ty: &Type) -> BasicTypeEnum<'ctx> {

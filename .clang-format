@@ -1,0 +1,7 @@
+BreakBeforeBraces: Allman
+SortIncludes: false
+IndentWidth: 4
+TabWidth: 5
+AccessModifierOffset: -4
+AlwaysBreakTemplateDeclarations: true
+ColumnLimit: 0

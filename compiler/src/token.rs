@@ -17,8 +17,25 @@ pub enum Token {
     NumberFloat(f64),
     StringLiteral(String),
 
-    Equals,
+    // single-char
+    Plus,
+    Minus,
+    Star,
     Divide,
+    Modulo,
+
+    Equals,  // =
+    Less,    // <
+    Greater, // >
+    Bang,    // !
+
+    // two-char
+    EqualEqual,   // ==
+    BangEqual,    // !=
+    LessEqual,    // <=
+    GreaterEqual, // >=
+    AndAnd,
+    OrOr,
 
     LParen,
     RParen,

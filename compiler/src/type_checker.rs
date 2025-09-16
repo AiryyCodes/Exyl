@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{Expr, Program, Stmt, Type},
+    ast::{BinaryOp, Expr, Program, Stmt, Type, UnaryOp},
     function::FunctionInfo,
     scope::ScopeStack,
 };
@@ -11,8 +11,11 @@ pub enum TypeError {
     UnknownVariable(String),
     UnknownFunction(String),
     TypeMismatch { expected: Type, found: Type },
+    BinaryTypeMismatch { left: Type, right: Type },
+    UnaryTypeMismatch { op: UnaryOp, ty: Type },
     ArgumentMismatch(String),
     ReturnOutsideFunction,
+    UnknownType,
 }
 
 pub struct TypeChecker {
@@ -170,6 +173,12 @@ impl TypeChecker {
         // 1. Arguments: nothing fancy yet, just trust parser
         let arg_types = arguments.clone();
 
+        self.scopes.push();
+
+        for (arg_name, arg_ty) in &arguments {
+            let _ = self.scopes.insert(arg_name.clone(), arg_ty.clone());
+        }
+
         // 2. If body is present, check it
         let inferred_return = if let Some(stmts) = &body {
             let mut return_types: Vec<Type> = Vec::new();
@@ -232,6 +241,8 @@ impl TypeChecker {
             ),
         );
 
+        self.scopes.pop();
+
         self.inside_function = false;
 
         // 4. Return function statement
@@ -268,6 +279,121 @@ impl TypeChecker {
             }
 
             Expr::FunctionCall { name, args } => self.type_check_function_call(name, args),
+
+            Expr::Binary { op, left, right } => {
+                let left_typed = self.type_check_expr(*left)?;
+                let right_typed = self.type_check_expr(*right)?;
+
+                let left_type = left_typed.get_type().ok_or(TypeError::UnknownType)?;
+                let right_type = right_typed.get_type().ok_or(TypeError::UnknownType)?;
+
+                // Check compatibility
+                let result_type = match op {
+                    BinaryOp::Add
+                    | BinaryOp::Subtract
+                    | BinaryOp::Multiply
+                    | BinaryOp::Divide
+                    | BinaryOp::Modulo => {
+                        if left_type.is_numeric() && right_type.is_numeric() {
+                            if left_type == right_type {
+                                left_type
+                            } else {
+                                // Optionally: promote smaller type to larger type
+                                return Err(TypeError::BinaryTypeMismatch {
+                                    left: left_type,
+                                    right: right_type,
+                                });
+                            }
+                        } else {
+                            return Err(TypeError::BinaryTypeMismatch {
+                                left: left_type,
+                                right: right_type,
+                            });
+                        }
+                    }
+
+                    BinaryOp::Equal | BinaryOp::NotEqual => {
+                        if left_type == right_type {
+                            Type::Bool
+                        } else {
+                            return Err(TypeError::BinaryTypeMismatch {
+                                left: left_type,
+                                right: right_type,
+                            });
+                        }
+                    }
+
+                    BinaryOp::LessThan
+                    | BinaryOp::LessThanOrEqual
+                    | BinaryOp::GreaterThan
+                    | BinaryOp::GreaterThanOrEqual => {
+                        if left_type.is_numeric() && left_type == right_type {
+                            Type::Bool
+                        } else {
+                            return Err(TypeError::BinaryTypeMismatch {
+                                left: left_type,
+                                right: right_type,
+                            });
+                        }
+                    }
+
+                    BinaryOp::LogicalAnd | BinaryOp::LogicalOr => {
+                        if left_type == Type::Bool && right_type == Type::Bool {
+                            Type::Bool
+                        } else {
+                            return Err(TypeError::BinaryTypeMismatch {
+                                left: left_type,
+                                right: right_type,
+                            });
+                        }
+                    }
+                };
+
+                Ok(Expr::Typed(
+                    Box::new(Expr::Binary {
+                        op,
+                        left: Box::new(left_typed),
+                        right: Box::new(right_typed),
+                    }),
+                    result_type,
+                ))
+            }
+
+            Expr::Unary { op, expr } => {
+                let typed_expr = self.type_check_expr(*expr)?;
+                let expr_type = typed_expr.get_type().ok_or(TypeError::UnknownType)?;
+
+                let result_type = match op {
+                    UnaryOp::Not => {
+                        if expr_type == Type::Bool {
+                            Type::Bool
+                        } else {
+                            return Err(TypeError::UnaryTypeMismatch {
+                                op: op.clone(),
+                                ty: expr_type,
+                            });
+                        }
+                    }
+                    UnaryOp::Negate => {
+                        if expr_type.is_numeric() {
+                            expr_type
+                        } else {
+                            return Err(TypeError::UnaryTypeMismatch {
+                                op: op.clone(),
+                                ty: expr_type,
+                            });
+                        }
+                    }
+                };
+
+                Ok(Expr::Typed(
+                    Box::new(Expr::Unary {
+                        op: op.clone(),
+                        expr: Box::new(typed_expr),
+                    }),
+                    result_type,
+                ))
+            }
 
             Expr::Typed(_, _) => Ok(expr), // already typed
         }

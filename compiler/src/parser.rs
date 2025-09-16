@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expr, Program, Stmt, Type},
+    ast::{BinaryOp, Expr, Program, Stmt, Type, UnaryOp},
     token::Token,
 };
 
@@ -57,7 +57,7 @@ impl Parser {
             Some(Token::If) => self.parse_if()?,
 
             Some(_) => {
-                let expr = self.parse_expr()?;
+                let expr = self.parse_primary()?;
                 Stmt::Expr(expr)
             }
             None => return Err(ParseError::new("Unexpected end of input")),
@@ -212,7 +212,7 @@ impl Parser {
         }
     }
 
-    fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+    fn parse_primary(&mut self) -> Result<Expr, ParseError> {
         match self.next() {
             Some(Token::NumberInt(n)) => Ok(Expr::NumberInt(*n)),
             Some(Token::NumberFloat(f)) => Ok(Expr::NumberFloat(*f)),
@@ -236,6 +236,10 @@ impl Parser {
         }
     }
 
+    fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+        self.parse_binary_expr(0)
+    }
+
     fn parse_func_call(&mut self, name: String) -> Result<Expr, ParseError> {
         self.expect(&Token::LParen)?;
 
@@ -247,7 +251,8 @@ impl Parser {
                 break;
             }
 
-            let arg = self.parse_expr()?;
+            // TODO: Maybe use self.parse_binary_expr()
+            let arg = self.parse_primary()?;
             args.push(arg);
 
             // If next is a comma, consume it and continue
@@ -327,6 +332,102 @@ impl Parser {
             then_branch: Box::new(then_branch),
             else_branch,
         })
+    }
+
+    fn parse_binary_expr(&mut self, min_prec: u8) -> Result<Expr, ParseError> {
+        let mut left = self.parse_unary()?; // first part
+
+        loop {
+            // Check next token
+            let op_token = match self.peek() {
+                Some(tok) if Parser::token_to_binary_op(tok).is_some() => tok.clone(),
+                _ => break,
+            };
+
+            let op = Parser::token_to_binary_op(&op_token).unwrap();
+            let prec = Parser::precedence(&op);
+
+            // If operator precedence is too low, stop
+            if prec < min_prec {
+                break;
+            }
+
+            self.next(); // consume operator
+
+            // Parse right-hand side with higher precedence
+            let right = self.parse_binary_expr(prec + 1)?;
+
+            left = Expr::Binary {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(left)
+    }
+
+    fn parse_unary(&mut self) -> Result<Expr, ParseError> {
+        match self.peek() {
+            Some(Token::Bang) => {
+                self.next();
+                let expr = self.parse_unary()?;
+                Ok(Expr::Unary {
+                    op: UnaryOp::Not,
+                    expr: Box::new(expr),
+                })
+            }
+            Some(Token::Minus) => {
+                self.next();
+                let expr = self.parse_unary()?;
+                Ok(Expr::Unary {
+                    op: UnaryOp::Negate,
+                    expr: Box::new(expr),
+                })
+            }
+            _ => self.parse_primary(),
+        }
+    }
+
+    fn precedence(op: &BinaryOp) -> u8 {
+        match op {
+            // Highest
+            BinaryOp::Multiply | BinaryOp::Divide | BinaryOp::Modulo => 20,
+            BinaryOp::Add | BinaryOp::Subtract => 10,
+
+            // Comparisons
+            BinaryOp::LessThan
+            | BinaryOp::LessThanOrEqual
+            | BinaryOp::GreaterThan
+            | BinaryOp::GreaterThanOrEqual
+            | BinaryOp::Equal
+            | BinaryOp::NotEqual => 5,
+
+            // Logical
+            BinaryOp::LogicalAnd => 3,
+            BinaryOp::LogicalOr => 2,
+        }
+    }
+
+    fn token_to_binary_op(token: &Token) -> Option<BinaryOp> {
+        match token {
+            Token::Plus => Some(BinaryOp::Add),
+            Token::Minus => Some(BinaryOp::Subtract),
+            Token::Star => Some(BinaryOp::Multiply),
+            Token::Divide => Some(BinaryOp::Divide),
+            Token::Modulo => Some(BinaryOp::Modulo),
+
+            Token::EqualEqual => Some(BinaryOp::Equal),
+            Token::BangEqual => Some(BinaryOp::NotEqual),
+            Token::Less => Some(BinaryOp::LessThan),
+            Token::LessEqual => Some(BinaryOp::LessThanOrEqual),
+            Token::Greater => Some(BinaryOp::GreaterThan),
+            Token::GreaterEqual => Some(BinaryOp::GreaterThanOrEqual),
+
+            Token::AndAnd => Some(BinaryOp::LogicalAnd),
+            Token::OrOr => Some(BinaryOp::LogicalOr),
+            _ => None,
+        }
     }
 }
 
