@@ -1,12 +1,12 @@
 extern fun print(str: string): void;
-extern fun print_num(num: f64): void;
+extern fun print_num(num: i64): void;
 
 fun add(a: i64, b: i64): i64 {
   return a + b;
 }
 
 fun test(a: i64, b: i64, c: i64): i64 {
-  return a % b;
+  return a + (b * c);
 }
 
 fun test_f64(a: f64, b: f64): f64 {
@@ -25,9 +25,9 @@ fun main() {
   let cond3: bool = !cond2;
 
   let x1: f64 = 1.0;
-  let y1: f64 = 2.0;
+  let y1: f64 = (x1 + 2.0);
 
-  print_num(x1);
+  // print_num(x1);
 
   if (x1 == y1 || !cond3) {
     print("If condition is true");
@@ -35,7 +35,7 @@ fun main() {
     print("If condition is false");
   }
 
-  print_num(test_f64(2., 4.));
+  print_num(test(2, 4, 6));
 
   return x;
 }

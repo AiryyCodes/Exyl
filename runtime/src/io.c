@@ -5,7 +5,7 @@ void print(const char *str)
     printf("%s\n", str);
 }
 
-void print_num(double num)
+void print_num(int num)
 {
-    printf("%f\n", num);
+    printf("%i\n", num);
 }

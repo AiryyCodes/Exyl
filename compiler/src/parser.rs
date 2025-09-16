@@ -230,6 +230,13 @@ impl Parser {
                     Ok(Expr::Identifier(name))
                 }
             }
+
+            Some(Token::LParen) => {
+                let expr = self.parse_expr()?; // parse inside
+                self.expect(&Token::RParen)?; // consume `)`
+                Ok(expr) // return just the inner expression
+            }
+
             other => Err(ParseError {
                 message: format!("Unexpected token in expression: {:?}", other),
             }),
