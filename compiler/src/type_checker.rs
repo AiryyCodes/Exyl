@@ -188,7 +188,7 @@ impl TypeChecker {
         // Insert variable into type environment
         self.scopes
             .insert(name.clone(), var_type.clone())
-            .unwrap_or_else(|err| panic!("{}", err));
+            .unwrap_or_else(|err| panic!("Type environment insertion failed for '{}': {}", name, err));
 
         Ok(Stmt::Let {
             name,
@@ -439,7 +439,7 @@ impl TypeChecker {
             Expr::ArrayLiteral(elements) => {
                 if elements.is_empty() {
                     return Err(TypeError::Generic(
-                        "Cannot infer type of empty array".into(),
+                        "Cannot infer type of an empty array literal".into(),
                     ));
                 }
 
@@ -484,7 +484,7 @@ impl TypeChecker {
                         *elem_ty,
                     )),
                     Type::Array(_, None) => Err(TypeError::Generic(
-                        "Dynamic arrays not supported yet".into(),
+                        "Indexing into dynamic arrays is not supported yet".into(),
                     )),
                     _ => Err(TypeError::TypeMismatch {
                         expected: Type::Array(Box::new(Type::I64), None),

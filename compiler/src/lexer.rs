@@ -10,259 +10,131 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
     let mut tokens: Vec<Token> = Vec::new();
     let mut chars = source.chars().peekable();
 
-    while let Some(&ch) = chars.peek() {
-        match ch {
+    while let Some(&current_char) = chars.peek() {
+        match current_char {
+            // --- identifiers & keywords ---
             'a'..='z' | 'A'..='Z' => {
-                let mut ident = String::new();
-
-                while let Some(&c) = chars.peek() {
-                    if c.is_alphanumeric() || c == '_' {
-                        ident.push(c);
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
-
+                let ident = read_identifier(&mut chars);
                 let token = match ident.as_str() {
                     "let" => Token::Let,
                     "fun" => Token::Function,
                     "return" => Token::Return,
                     "extern" => Token::Extern,
-
                     "if" => Token::If,
                     "else" => Token::Else,
-
                     "true" => Token::True,
                     "false" => Token::False,
-
                     _ => Token::Identifier(ident),
                 };
                 tokens.push(token);
             }
 
+            // --- dot / ellipsis ---
             '.' => {
-                let mut iter = chars.clone();
-                iter.next(); // skip first dot
-
-                if let Some(&next1) = iter.peek() {
-                    if next1 == '.' {
-                        iter.next();
-                        if let Some(&next2) = iter.peek() {
-                            if next2 == '.' {
-                                // Got "..."
-                                chars.next();
-                                chars.next();
-                                chars.next(); // consume all three
-                                tokens.push(Token::DotDotDot);
-                                continue;
-                            }
-                        }
-                    }
+                if try_push_ellipsis(&mut tokens, &mut chars) {
+                    continue;
                 }
-
-                // Otherwise just a single dot
+                // single dot
                 chars.next();
                 tokens.push(Token::Dot);
             }
 
+            // --- numbers (decimal / float) ---
             '0'..='9' | '.' => {
-                let mut number = String::new();
-                let mut has_dot = false;
-
-                while let Some(&c) = chars.peek() {
-                    if c.is_ascii_digit() {
-                        number.push(c);
-                        chars.next();
-                    } else if c == '.' && !has_dot {
-                        has_dot = true;
-                        number.push('.');
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
-
-                // Handle leading/trailing dot
-                if number == "." {
-                    // single dot, could be tokenized separately as Dot token
-                    tokens.push(Token::Dot);
-                    chars.next(); // consume
-                } else {
-                    if number.starts_with('.') {
-                        number.insert(0, '0');
-                    }
-                    if number.ends_with('.') {
-                        number.push('0');
-                    }
-
-                    if has_dot {
-                        let value = number.parse::<f64>().map_err(|err| LexError {
-                            message: format!("Invalid float '{}': {}", number, err),
-                        })?;
-                        tokens.push(Token::NumberFloat(value));
-                    } else {
-                        let value = number.parse::<i64>().map_err(|err| LexError {
-                            message: format!("Invalid int '{}': {}", number, err),
-                        })?;
-                        tokens.push(Token::NumberInt(value));
-                    }
-                }
+                let token = lex_number(&mut chars)?;
+                tokens.push(token);
             }
 
+            // --- strings ---
             '"' => {
-                chars.next(); // Consume the opening quote
-                let mut string_content = String::new();
-
-                while let Some(&c) = chars.peek() {
-                    match c {
-                        '"' => {
-                            chars.next(); // Consume the closing quote
-                            break;
-                        }
-                        '\\' => {
-                            chars.next(); // Consume the backslash
-                            if let Some(escaped) = chars.next() {
-                                let escaped_char = match escaped {
-                                    'n' => '\n',
-                                    'r' => '\r',
-                                    't' => '\t',
-                                    '"' => '"',
-                                    '\\' => '\\',
-                                    other => other, // Default: keep the character
-                                };
-                                string_content.push(escaped_char);
-                            } else {
-                                return Err(LexError {
-                                    message: "Unfinished escape sequence in string".to_string(),
-                                });
-                            }
-                        }
-                        _ => {
-                            string_content.push(c);
-                            chars.next();
-                        }
-                    }
-                }
-
-                tokens.push(Token::StringLiteral(string_content));
+                let token = lex_string(&mut chars)?;
+                tokens.push(token);
             }
 
+            // --- arithmetic ---
             '+' => push_token(Token::Plus, &mut tokens, &mut chars),
             '-' => push_token(Token::Minus, &mut tokens, &mut chars),
             '*' => push_token(Token::Star, &mut tokens, &mut chars),
             '%' => push_token(Token::Modulo, &mut tokens, &mut chars),
 
+            // --- comparisons / equality ---
             '=' => {
                 chars.next();
-                if let Some(&'=') = chars.peek() {
-                    chars.next();
+                if consume_if_next(&mut chars, '=') {
                     tokens.push(Token::EqualEqual);
                 } else {
                     tokens.push(Token::Equals);
                 }
             }
-
             '!' => {
                 chars.next();
-                if let Some(&'=') = chars.peek() {
-                    chars.next();
+                if consume_if_next(&mut chars, '=') {
                     tokens.push(Token::BangEqual);
                 } else {
-                    tokens.push(Token::Bang); // maybe later for logical NOT
+                    tokens.push(Token::Bang);
                 }
             }
-
             '<' => {
                 chars.next();
-                if let Some(&'=') = chars.peek() {
-                    chars.next();
+                if consume_if_next(&mut chars, '=') {
                     tokens.push(Token::LessEqual);
                 } else {
                     tokens.push(Token::Less);
                 }
             }
-
             '>' => {
                 chars.next();
-                if let Some(&'=') = chars.peek() {
-                    chars.next();
+                if consume_if_next(&mut chars, '=') {
                     tokens.push(Token::GreaterEqual);
                 } else {
                     tokens.push(Token::Greater);
                 }
             }
 
+            // --- logical ---
             '&' => {
                 chars.next();
-                if let Some(&'&') = chars.peek() {
-                    chars.next();
+                if consume_if_next(&mut chars, '&') {
                     tokens.push(Token::AndAnd);
                 }
             }
-
             '|' => {
                 chars.next();
-                if let Some(&'|') = chars.peek() {
-                    chars.next();
+                if consume_if_next(&mut chars, '|') {
                     tokens.push(Token::OrOr);
                 }
             }
 
+            // --- delimiters ---
             '(' => push_token(Token::LParen, &mut tokens, &mut chars),
             ')' => push_token(Token::RParen, &mut tokens, &mut chars),
             '{' => push_token(Token::LBrace, &mut tokens, &mut chars),
             '}' => push_token(Token::RBrace, &mut tokens, &mut chars),
             '[' => push_token(Token::LBracket, &mut tokens, &mut chars),
             ']' => push_token(Token::RBracket, &mut tokens, &mut chars),
-
             ':' => push_token(Token::Colon, &mut tokens, &mut chars),
             ';' => push_token(Token::Semicolon, &mut tokens, &mut chars),
             ',' => push_token(Token::Comma, &mut tokens, &mut chars),
 
+            // --- whitespace ---
             c if c.is_whitespace() || c == '\r' => {
-                chars.next(); // Skip whitespace
+                chars.next();
             }
 
-            // --- comments ---
+            // --- comments / divide ---
             '/' => {
-                chars.next(); // consume '/'
-                if let Some(&next_ch) = chars.peek() {
-                    match next_ch {
-                        '/' => {
-                            // line comment: skip until newline
-                            while let Some(&c) = chars.peek() {
-                                chars.next();
-                                if c == '\n' {
-                                    break;
-                                }
-                            }
-                        }
-                        '*' => {
-                            // block comment: skip until "*/"
-                            chars.next(); // consume '*'
-                            let mut last = '\0';
-                            while let Some(c) = chars.next() {
-                                if last == '*' && c == '/' {
-                                    break; // found closing */
-                                }
-                                last = c;
-                            }
-                        }
-                        _ => {
-                            // not actually a comment -> maybe it's division operator?
-                            tokens.push(Token::Divide);
-                        }
-                    }
-                } else {
-                    // just a single '/' at EOF
-                    tokens.push(Token::Divide);
+                chars.next(); // consumed '/'
+                match chars.peek().copied() {
+                    Some('/') => skip_line_comment(&mut chars),
+                    Some('*') => skip_block_comment(&mut chars),
+                    _ => tokens.push(Token::Divide),
                 }
             }
 
-            _ => {
+            // --- unexpected ---
+            other => {
                 return Err(LexError {
-                    message: format!("Unexpected character '{}'", ch),
+                    message: format!("Unexpected character '{}'", other),
                 });
             }
         }
@@ -274,4 +146,152 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
 fn push_token(token: Token, tokens: &mut Vec<Token>, chars: &mut Peekable<Chars<'_>>) {
     tokens.push(token);
     chars.next();
+}
+
+fn read_identifier(chars: &mut Peekable<Chars<'_>>) -> String {
+    let mut ident = String::new();
+    while let Some(&next_char) = chars.peek() {
+        if next_char.is_alphanumeric() || next_char == '_' {
+            ident.push(next_char);
+            chars.next();
+        } else {
+            break;
+        }
+    }
+    ident
+}
+
+fn try_push_ellipsis(tokens: &mut Vec<Token>, chars: &mut Peekable<Chars<'_>>) -> bool {
+    // Lookahead for "..." without consuming unless matched
+    let mut lookahead = chars.clone();
+    lookahead.next(); // first '.' already matched by caller
+    if matches!(lookahead.peek(), Some('.')) {
+        lookahead.next();
+        if matches!(lookahead.peek(), Some('.')) {
+            // Confirm and consume three characters
+            chars.next();
+            chars.next();
+            chars.next();
+            tokens.push(Token::DotDotDot);
+            return true;
+        }
+    }
+    false
+}
+
+fn lex_number(chars: &mut Peekable<Chars<'_>>) -> Result<Token, LexError> {
+    let mut number_literal = String::new();
+    let mut has_decimal_point = false;
+
+    while let Some(&next_char) = chars.peek() {
+        if next_char.is_ascii_digit() {
+            number_literal.push(next_char);
+            chars.next();
+        } else if next_char == '.' && !has_decimal_point {
+            has_decimal_point = true;
+            number_literal.push('.');
+            chars.next();
+        } else {
+            break;
+        }
+    }
+
+    if number_literal == "." {
+        // Maintain prior behavior: single '.' becomes Dot token and advance once more
+        // Caller already handled '...' and a single '.' arm, but we keep this for parity
+        // with the original implementation in edge paths.
+        return Ok(Token::Dot);
+    }
+
+    if number_literal.starts_with('.') {
+        number_literal.insert(0, '0');
+    }
+    if number_literal.ends_with('.') {
+        number_literal.push('0');
+    }
+
+    if has_decimal_point {
+        let value = number_literal.parse::<f64>().map_err(|err| LexError {
+            message: format!("Invalid float '{}': {}", number_literal, err),
+        })?;
+        Ok(Token::NumberFloat(value))
+    } else {
+        let value = number_literal.parse::<i64>().map_err(|err| LexError {
+            message: format!("Invalid int '{}': {}", number_literal, err),
+        })?;
+        Ok(Token::NumberInt(value))
+    }
+}
+
+fn lex_string(chars: &mut Peekable<Chars<'_>>) -> Result<Token, LexError> {
+    // Opening quote is at peek position
+    chars.next();
+    let mut content = String::new();
+
+    while let Some(&next_char) = chars.peek() {
+        match next_char {
+            '"' => {
+                chars.next();
+                break;
+            }
+            '\\' => {
+                chars.next(); // consume '\\'
+                if let Some(escaped) = chars.next() {
+                    let actual = match escaped {
+                        'n' => '\n',
+                        'r' => '\r',
+                        't' => '\t',
+                        '"' => '"',
+                        '\\' => '\\',
+                        other => other,
+                    };
+                    content.push(actual);
+                } else {
+                    return Err(LexError {
+                        message: "Unfinished escape sequence in string".to_string(),
+                    });
+                }
+            }
+            _ => {
+                content.push(next_char);
+                chars.next();
+            }
+        }
+    }
+
+    Ok(Token::StringLiteral(content))
+}
+
+fn skip_line_comment(chars: &mut Peekable<Chars<'_>>) {
+    // We are positioned at the second '/'
+    // Consume it first
+    chars.next();
+    while let Some(&next_char) = chars.peek() {
+        chars.next();
+        if next_char == '\n' {
+            break;
+        }
+    }
+}
+
+fn skip_block_comment(chars: &mut Peekable<Chars<'_>>) {
+    // We are positioned at '*'
+    chars.next(); // consume '*'
+    let mut last = '\0';
+    while let Some(next_char) = chars.next() {
+        if last == '*' && next_char == '/' {
+            break;
+        }
+        last = next_char;
+    }
+}
+
+fn consume_if_next(chars: &mut Peekable<Chars<'_>>, expected: char) -> bool {
+    if let Some(&next_char) = chars.peek() {
+        if next_char == expected {
+            chars.next();
+            return true;
+        }
+    }
+    false
 }

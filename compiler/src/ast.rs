@@ -14,6 +14,7 @@ pub struct Program {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
+    // --- declarations ---
     Let {
         name: String,
         ty: Option<Type>,
@@ -28,42 +29,51 @@ pub enum Stmt {
         is_extern: bool,
         is_variadic: bool,
     },
+
+    // --- flow control ---
     Return(Option<Expr>),
-    Block(Vec<Stmt>), // For nested scopes
     If {
         condition: Expr,
         then_branch: Box<Stmt>,
         else_branch: Option<Box<Stmt>>,
     },
+
+    // --- blocks & expression statements ---
+    Block(Vec<Stmt>), // For nested scopes
     Expr(Expr),
 }
 
 #[derive(Debug, Clone)]
 pub enum Expr {
+    // --- literals ---
     NumberInt(i64),
     NumberFloat(f64),
     BoolLiteral(bool),
     StringLiteral(String),
+
+    // --- names & calls ---
     Identifier(String),
     FunctionCall {
         name: String,
         args: Vec<Expr>,
     },
 
+    // --- operations ---
     Binary {
         op: BinaryOp,
         left: Box<Expr>,
         right: Box<Expr>,
     },
-
     Unary {
         op: UnaryOp,
         expr: Box<Expr>,
     },
 
+    // --- arrays & indexing ---
     ArrayLiteral(Vec<Expr>),
     Index(Box<Expr>, Box<Expr>),
 
+    // --- type ascription ---
     Typed(Box<Expr>, Type),
 }
 
@@ -111,12 +121,14 @@ impl Expr {
 
 #[derive(Debug, Clone)]
 pub enum BinaryOp {
+    // --- arithmetic ---
     Add,      // +
     Subtract, // -
     Multiply, // *
     Divide,   // /
     Modulo,   // %
 
+    // --- comparisons ---
     Equal,              // ==
     NotEqual,           // !=
     LessThan,           // <
@@ -124,23 +136,28 @@ pub enum BinaryOp {
     GreaterThan,        // >
     GreaterThanOrEqual, // >=
 
+    // --- logical ---
     LogicalAnd, // &&
     LogicalOr,  // ||
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
+    // --- logical & arithmetic ---
     Not,    // !
     Negate, // - for numbers
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
+    // --- primitives ---
     I64,
     F64,
     Bool,
     String,
     Void,
+
+    // --- composites ---
     Array(Box<Type>, Option<usize>),
 }
 

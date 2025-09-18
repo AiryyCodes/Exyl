@@ -39,10 +39,10 @@ impl Parser {
         match self.next() {
             Some(tok) if tok == expected => Ok(()),
             Some(tok) => Err(ParseError {
-                message: format!("Expected {:?}, found {:?}", expected, tok),
+                message: format!("Expected token {:?}, but found {:?}", expected, tok),
             }),
             None => Err(ParseError {
-                message: format!("Expected {:?}, found end of input", expected),
+                message: format!("Expected token {:?}, but found end of input", expected),
             }),
         }
     }
@@ -60,7 +60,7 @@ impl Parser {
                 let expr = self.parse_primary()?;
                 Stmt::Expr(expr)
             }
-            None => return Err(ParseError::new("Unexpected end of input")),
+            None => return Err(ParseError::new("Unexpected end of input while parsing a statement")),
         };
 
         // Only require semicolon for expressions and let-statements
@@ -81,7 +81,7 @@ impl Parser {
             Some(Token::Identifier(ident)) => ident.clone(),
             other => {
                 return Err(ParseError {
-                    message: format!("Expected identifier after let, found {:?}", other),
+                    message: format!("Expected an identifier after 'let', but found {:?}", other),
                 });
             }
         };
@@ -89,7 +89,7 @@ impl Parser {
         // check for optional type annotation
         let ty = if let Some(Token::Colon) = self.peek() {
             self.next(); // consume ':'
-            Some(self.parse_type()?) // you need a parse_type() function
+            Some(self.parse_type()?)
         } else {
             None
         };
@@ -115,7 +115,7 @@ impl Parser {
             Some(Token::Identifier(ident)) => ident.clone(),
             other => {
                 return Err(ParseError {
-                    message: format!("Expected identifier after fun, found {:?}", other),
+                    message: format!("Expected function name after 'fun', but found {:?}", other),
                 });
             }
         };
@@ -137,7 +137,7 @@ impl Parser {
 
                 // variadic must be last
                 if let Some(Token::Comma) = self.peek() {
-                    return Err(ParseError::new("Variadic parameter must be last"));
+                    return Err(ParseError::new("Variadic parameter ('...') must be the last parameter"));
                 }
                 break;
             }
@@ -146,7 +146,7 @@ impl Parser {
             let arg_name = if let Token::Identifier(ident) = self.next().unwrap() {
                 ident.clone()
             } else {
-                return Err(ParseError::new("Expected identifier in parameter list"));
+                return Err(ParseError::new("Expected an identifier in parameter list"));
             };
 
             self.expect(&Token::Colon)?;
@@ -189,7 +189,7 @@ impl Parser {
             }
             other => {
                 return Err(ParseError {
-                    message: format!("Expected function body '{{' or ';', found {:?}", other),
+                    message: format!("Expected a function body '{{ ... }}' or ';' after signature, but found {:?}", other),
                 });
             }
         };
@@ -215,13 +215,13 @@ impl Parser {
                 "void" => Type::Void,
                 other => {
                     return Err(ParseError {
-                        message: format!("Unknown type '{}'", other),
+                        message: format!("Unknown type name '{}'. Supported types: i64, f64, bool, string, void", other),
                     });
                 }
             },
             other => {
                 return Err(ParseError {
-                    message: format!("Expected type name, found {:?}", other),
+                    message: format!("Expected a type name, but found {:?}", other),
                 });
             }
         };
@@ -296,7 +296,7 @@ impl Parser {
             }
             Some(Token::LBracket) => self.parse_array_literal(),
             other => Err(ParseError {
-                message: format!("Unexpected token in expression: {:?}", other),
+                message: format!("Unexpected token while parsing expression: {:?}", other),
             }),
         }
     }
@@ -330,7 +330,7 @@ impl Parser {
         let name = match func_expr {
             Expr::Identifier(n) => n,
             _ => {
-                return Err(ParseError::new("Can only call identifiers right now"));
+                return Err(ParseError::new("Only calls to named functions (identifiers) are supported"));
             }
         };
 
@@ -364,7 +364,7 @@ impl Parser {
         let expr_opt = match self.peek() {
             Some(&Token::Semicolon) => None,
             Some(_) => Some(self.parse_expr()?),
-            None => return Err(ParseError::new("Unexpected end of input after return")),
+            None => return Err(ParseError::new("Unexpected end of input after 'return'")),
         };
 
         // Consume semicolon that ends the return
