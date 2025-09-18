@@ -213,6 +213,8 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
             ')' => push_token(Token::RParen, &mut tokens, &mut chars),
             '{' => push_token(Token::LBrace, &mut tokens, &mut chars),
             '}' => push_token(Token::RBrace, &mut tokens, &mut chars),
+            '[' => push_token(Token::LBracket, &mut tokens, &mut chars),
+            ']' => push_token(Token::RBracket, &mut tokens, &mut chars),
 
             ':' => push_token(Token::Colon, &mut tokens, &mut chars),
             ';' => push_token(Token::Semicolon, &mut tokens, &mut chars),

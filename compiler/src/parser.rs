@@ -206,52 +206,95 @@ impl Parser {
     }
 
     fn parse_type(&mut self) -> Result<Type, ParseError> {
-        match self.next() {
+        let base_type = match self.next() {
             Some(Token::Identifier(type_name)) => match type_name.as_str() {
-                "i64" => Ok(Type::I64),
-
-                "f64" => Ok(Type::F64),
-
-                "bool" => Ok(Type::Bool),
-
-                "string" => Ok(Type::String),
-
-                "void" => Ok(Type::Void),
-                other => Err(ParseError {
-                    message: format!("Unknown type '{}'", other),
-                }),
+                "i64" => Type::I64,
+                "f64" => Type::F64,
+                "bool" => Type::Bool,
+                "string" => Type::String,
+                "void" => Type::Void,
+                other => {
+                    return Err(ParseError {
+                        message: format!("Unknown type '{}'", other),
+                    });
+                }
             },
-            other => Err(ParseError {
-                message: format!("Expected type name, found {:?}", other),
-            }),
+            other => {
+                return Err(ParseError {
+                    message: format!("Expected type name, found {:?}", other),
+                });
+            }
+        };
+
+        // Check for array brackets
+        if let Some(&Token::LBracket) = self.peek() {
+            self.next(); // consume '['
+
+            // Check for fixed array
+            if let Some(&Token::NumberInt(n)) = self.peek() {
+                self.next();
+                self.expect(&Token::RBracket)?;
+                return Ok(Type::Array(Box::new(base_type), Some(n as usize)));
+            }
+
+            self.expect(&Token::RBracket)?; // consume ']'
+            Ok(Type::Array(Box::new(base_type), None))
+        } else {
+            Ok(base_type)
         }
     }
 
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
-        match self.next() {
-            Some(Token::NumberInt(n)) => Ok(Expr::NumberInt(*n)),
-            Some(Token::NumberFloat(f)) => Ok(Expr::NumberFloat(*f)),
-
-            Some(Token::True) => Ok(Expr::BoolLiteral(true)),
-            Some(Token::False) => Ok(Expr::BoolLiteral(false)),
-
-            Some(Token::StringLiteral(s)) => Ok(Expr::StringLiteral(s.clone())),
-
+        match self.peek() {
+            Some(Token::NumberInt(_)) => {
+                let n = if let Some(Token::NumberInt(n)) = self.next() {
+                    *n
+                } else {
+                    unreachable!()
+                };
+                Ok(Expr::NumberInt(n))
+            }
+            Some(Token::NumberFloat(_)) => {
+                let f = if let Some(Token::NumberFloat(f)) = self.next() {
+                    *f
+                } else {
+                    unreachable!()
+                };
+                Ok(Expr::NumberFloat(f))
+            }
+            Some(Token::True) => {
+                self.next();
+                Ok(Expr::BoolLiteral(true))
+            }
+            Some(Token::False) => {
+                self.next();
+                Ok(Expr::BoolLiteral(false))
+            }
+            Some(Token::StringLiteral(_)) => {
+                let s = if let Some(Token::StringLiteral(s)) = self.next() {
+                    s.clone()
+                } else {
+                    unreachable!()
+                };
+                Ok(Expr::StringLiteral(s))
+            }
             Some(Token::Identifier(ident)) => {
                 let name = ident.clone();
-                if let Some(Token::LParen) = self.peek() {
-                    self.parse_func_call(name)
+                if let Some(Token::LParen) = self.tokens.get(self.pos + 1) {
+                    self.next(); // consume identifier
+                    self.parse_func_call(Expr::Identifier(name))
                 } else {
+                    self.next();
                     Ok(Expr::Identifier(name))
                 }
             }
-
             Some(Token::LParen) => {
-                let expr = self.parse_expr()?; // parse inside
-                self.expect(&Token::RParen)?; // consume `)`
-                Ok(expr) // return just the inner expression
+                self.next(); // consume '('
+                let expr = self.parse_expr()?;
+                self.expect(&Token::RParen)?;
+                Ok(expr)
             }
-
+            Some(Token::LBracket) => self.parse_array_literal(),
             other => Err(ParseError {
                 message: format!("Unexpected token in expression: {:?}", other),
             }),
@@ -262,22 +305,47 @@ impl Parser {
         self.parse_binary_expr(0)
     }
 
-    fn parse_func_call(&mut self, name: String) -> Result<Expr, ParseError> {
-        self.expect(&Token::LParen)?;
+    fn parse_postfix_expr(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.parse_primary()?;
 
+        loop {
+            match self.peek() {
+                Some(Token::LParen) => {
+                    expr = self.parse_func_call(expr)?;
+                }
+                Some(Token::LBracket) => {
+                    self.next(); // consume '['
+                    let index_expr = self.parse_expr()?;
+                    self.expect(&Token::RBracket)?;
+                    expr = Expr::Index(Box::new(expr), Box::new(index_expr));
+                }
+                _ => break,
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn parse_func_call(&mut self, func_expr: Expr) -> Result<Expr, ParseError> {
+        let name = match func_expr {
+            Expr::Identifier(n) => n,
+            _ => {
+                return Err(ParseError::new("Can only call identifiers right now"));
+            }
+        };
+
+        self.expect(&Token::LParen)?;
         let mut args = Vec::new();
 
-        // Parse zero or more arguments until ')'
         while let Some(token) = self.peek() {
             if let Token::RParen = token {
                 break;
             }
 
-            // TODO: Maybe use self.parse_binary_expr()
-            let arg = self.parse_primary()?;
+            // parse full expression INCLUDING [] and other postfix ops
+            let arg = self.parse_postfix_expr()?;
             args.push(arg);
 
-            // If next is a comma, consume it and continue
             if let Some(Token::Comma) = self.peek() {
                 self.next();
             } else {
@@ -286,7 +354,6 @@ impl Parser {
         }
 
         self.expect(&Token::RParen)?;
-
         Ok(Expr::FunctionCall { name, args })
     }
 
@@ -356,6 +423,26 @@ impl Parser {
         })
     }
 
+    fn parse_array_literal(&mut self) -> Result<Expr, ParseError> {
+        self.expect(&Token::LBracket)?;
+        let mut elements = Vec::new();
+
+        while let Some(tok) = self.peek() {
+            if let Token::RBracket = tok {
+                break;
+            }
+            elements.push(self.parse_expr()?);
+            if let Some(Token::Comma) = self.peek() {
+                self.next();
+            } else {
+                break;
+            }
+        }
+
+        self.expect(&Token::RBracket)?;
+        Ok(Expr::ArrayLiteral(elements))
+    }
+
     fn parse_binary_expr(&mut self, min_prec: u8) -> Result<Expr, ParseError> {
         let mut left = self.parse_unary()?; // first part
 
@@ -407,7 +494,7 @@ impl Parser {
                     expr: Box::new(expr),
                 })
             }
-            _ => self.parse_primary(),
+            _ => self.parse_postfix_expr(),
         }
     }
 

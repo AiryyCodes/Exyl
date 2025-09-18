@@ -16,6 +16,7 @@ pub enum TypeError {
     ArgumentMismatch(String),
     ReturnOutsideFunction,
     UnknownType,
+    Generic(String),
 }
 
 pub struct TypeChecker {
@@ -138,15 +139,50 @@ impl TypeChecker {
         // Determine the final variable type
         let var_type = match declared_ty {
             Some(ref ty) => {
-                if *ty != inferred_ty {
-                    return Err(TypeError::TypeMismatch {
-                        expected: ty.clone(),
-                        found: inferred_ty,
-                    });
+                match (ty, &inferred_ty) {
+                    // Dynamic array declared, literal array assigned
+                    (Type::Array(elem_decl, None), Type::Array(elem_val, Some(_))) => {
+                        if elem_decl.as_ref() != elem_val.as_ref() {
+                            return Err(TypeError::TypeMismatch {
+                                expected: *elem_decl.clone(),
+                                found: *elem_val.clone(),
+                            });
+                        }
+                        Type::Array(elem_decl.clone(), None)
+                    }
+
+                    // Fixed-length arrays: lengths and element types must match
+                    (
+                        Type::Array(elem_decl, Some(len_decl)),
+                        Type::Array(elem_val, Some(len_val)),
+                    ) => {
+                        if len_decl != len_val || elem_decl.as_ref() != elem_val.as_ref() {
+                            return Err(TypeError::TypeMismatch {
+                                expected: ty.clone(),
+                                found: inferred_ty,
+                            });
+                        }
+                        Type::Array(elem_decl.clone(), Some(*len_val))
+                    }
+
+                    // All other types
+                    _ => {
+                        if *ty != inferred_ty {
+                            return Err(TypeError::TypeMismatch {
+                                expected: ty.clone(),
+                                found: inferred_ty,
+                            });
+                        }
+                        ty.clone()
+                    }
                 }
-                ty.clone()
             }
-            None => inferred_ty, // ← inferred type
+            None => {
+                match inferred_ty {
+                    Type::Array(elem_ty, Some(len)) => Type::Array(elem_ty, Some(len)), // keep literal length
+                    _ => inferred_ty,
+                }
+            }
         };
 
         // Insert variable into type environment
@@ -398,6 +434,63 @@ impl TypeChecker {
                     }),
                     result_type,
                 ))
+            }
+
+            Expr::ArrayLiteral(elements) => {
+                if elements.is_empty() {
+                    return Err(TypeError::Generic(
+                        "Cannot infer type of empty array".into(),
+                    ));
+                }
+
+                // Type check each element
+                let first_type = self
+                    .type_check_expr(elements[0].clone())?
+                    .get_type()
+                    .unwrap();
+                for elem in &elements[1..] {
+                    let elem_type = self.type_check_expr(elem.clone())?.get_type().unwrap();
+                    if elem_type != first_type {
+                        return Err(TypeError::TypeMismatch {
+                            expected: first_type.clone(),
+                            found: elem_type,
+                        });
+                    }
+                }
+
+                Ok(Expr::Typed(
+                    Box::new(Expr::ArrayLiteral(elements.clone())),
+                    Type::Array(Box::new(first_type), Some(elements.len())), // wrap in Array
+                ))
+            }
+
+            Expr::Index(array_expr, index_expr) => {
+                let array_typed = self.type_check_expr(*array_expr)?;
+                let array_ty = array_typed.get_type().unwrap();
+
+                let index_typed = self.type_check_expr(*index_expr)?;
+                let index_ty = index_typed.get_type().unwrap();
+
+                if index_ty != Type::I64 {
+                    return Err(TypeError::TypeMismatch {
+                        expected: Type::I64,
+                        found: index_ty,
+                    });
+                }
+
+                match array_ty {
+                    Type::Array(elem_ty, Some(_len)) => Ok(Expr::Typed(
+                        Box::new(Expr::Index(Box::new(array_typed), Box::new(index_typed))),
+                        *elem_ty,
+                    )),
+                    Type::Array(_, None) => Err(TypeError::Generic(
+                        "Dynamic arrays not supported yet".into(),
+                    )),
+                    _ => Err(TypeError::TypeMismatch {
+                        expected: Type::Array(Box::new(Type::I64), None),
+                        found: array_ty,
+                    }),
+                }
             }
 
             Expr::Typed(_, _) => Ok(expr), // already typed

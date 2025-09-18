@@ -1,11 +1,15 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ops::Deref;
 
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
-use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType};
-use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PointerValue};
+use inkwell::types::{ArrayType, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType};
+use inkwell::values::{
+    ArrayValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum, FloatValue, FunctionValue,
+    IntValue, PointerValue,
+};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 
 use crate::ast::{BinaryOp, Expr, ExylLLVMType, Program, Stmt, Type, UnaryOp};
@@ -93,6 +97,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let ty = ty
                     .as_ref()
                     .expect("Variable type must be set by type checker");
+
                 let llvm_type = self.llvm_var_type(ty);
 
                 let init_val = self.codegen_expr(value);
@@ -557,6 +562,83 @@ impl<'ctx> CodeGen<'ctx> {
                 }
             }
 
+            Expr::ArrayLiteral(elements) => {
+                if elements.is_empty() {
+                    panic!("Empty array literal not supported yet");
+                }
+
+                // For a flat array of i64
+                let vals: Vec<BasicValueEnum> =
+                    elements.iter().map(|e| self.codegen_expr(e)).collect();
+
+                if vals.is_empty() {
+                    panic!("Empty array literal not supported yet");
+                }
+
+                let elem_ty = vals[0].get_type();
+
+                for v in &vals {
+                    if v.get_type() != elem_ty {
+                        panic!("Mismatched element types in array literal");
+                    }
+                }
+
+                let array_val = match vals[0] {
+                    BasicValueEnum::IntValue(_) => {
+                        let int_vals: Vec<IntValue> =
+                            vals.into_iter().map(|v| v.into_int_value()).collect();
+                        elem_ty
+                            .into_int_type()
+                            .const_array(&int_vals)
+                            .as_basic_value_enum()
+                    }
+                    BasicValueEnum::FloatValue(_) => {
+                        let float_vals: Vec<FloatValue> =
+                            vals.into_iter().map(|v| v.into_float_value()).collect();
+                        elem_ty
+                            .into_float_type()
+                            .const_array(&float_vals)
+                            .as_basic_value_enum()
+                    }
+                    BasicValueEnum::PointerValue(_) => {
+                        let ptr_vals: Vec<PointerValue> =
+                            vals.into_iter().map(|v| v.into_pointer_value()).collect();
+                        elem_ty
+                            .into_pointer_type()
+                            .const_array(&ptr_vals)
+                            .as_basic_value_enum()
+                    }
+                    _ => unimplemented!("Unsupported array element type for const_array"),
+                };
+
+                array_val.as_basic_value_enum()
+            }
+
+            Expr::Index(array_expr, index_expr) => {
+                let array_val = self.codegen_expr(array_expr);
+                let index_val = self.codegen_expr(index_expr);
+
+                let index_int = match index_val {
+                    BasicValueEnum::IntValue(i) => i.get_zero_extended_constant().unwrap() as u32,
+                    _ => panic!("Array index must be an integer"),
+                };
+
+                match array_val {
+                    BasicValueEnum::PointerValue(_) => {
+                        panic!("Dynamic array indexing not implemented")
+                    }
+
+                    BasicValueEnum::ArrayValue(arr) => {
+                        let extracted = self
+                            .builder
+                            .build_extract_value(arr, index_int, "extract")
+                            .expect("extract value failed");
+                        extracted.as_basic_value_enum()
+                    }
+                    _ => panic!("Index non-array values is not supported yet"),
+                }
+            }
+
             Expr::Typed(inner, _ty) => self.codegen_expr(inner),
             _ => unimplemented!(),
         }
@@ -652,6 +734,22 @@ impl<'ctx> CodeGen<'ctx> {
             Type::Bool => self.context.bool_type().into(),
             Type::String => self.context.ptr_type(AddressSpace::default()).into(),
             Type::Void => panic!("Cannot generate LLVM type for void"),
+            Type::Array(elem_ty, len_opt) => {
+                let llvm_elem = self.llvm_var_type(elem_ty);
+                let array_len = len_opt.unwrap_or(0); // 0 for dynamic later
+
+                match llvm_elem {
+                    BasicTypeEnum::IntType(int_ty) => int_ty.array_type(array_len as u32).into(),
+                    BasicTypeEnum::FloatType(float_ty) => {
+                        float_ty.array_type(array_len as u32).into()
+                    }
+                    BasicTypeEnum::PointerType(ptr_ty) => {
+                        ptr_ty.array_type(array_len as u32).into()
+                    }
+                    BasicTypeEnum::ArrayType(arr_ty) => arr_ty.array_type(array_len as u32).into(),
+                    _ => unimplemented!("Unsupported array element type"),
+                }
+            }
         }
     }
 

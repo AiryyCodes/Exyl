@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 use inkwell::{
     AddressSpace,
     types::{BasicTypeEnum, VoidType},
@@ -59,6 +61,9 @@ pub enum Expr {
         expr: Box<Expr>,
     },
 
+    ArrayLiteral(Vec<Expr>),
+    Index(Box<Expr>, Box<Expr>),
+
     Typed(Box<Expr>, Type),
 }
 
@@ -92,6 +97,12 @@ impl Expr {
             },
 
             Expr::Unary { .. } => None,
+
+            Expr::ArrayLiteral(_) => None,
+            Expr::Index(array_expr, _) => match array_expr.get_type()? {
+                Type::Array(elem_ty, _) => Some(*elem_ty),
+                _ => None,
+            },
 
             Expr::Typed(_, ty) => Some(ty.clone()),
         }
@@ -130,6 +141,7 @@ pub enum Type {
     Bool,
     String,
     Void,
+    Array(Box<Type>, Option<usize>),
 }
 
 impl Type {
@@ -143,6 +155,20 @@ impl Type {
 
     pub fn is_float(&self) -> bool {
         matches!(self, Type::F64)
+    }
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::I64 => write!(f, "i64"),
+            Type::F64 => write!(f, "f64"),
+            Type::Bool => write!(f, "bool"),
+            Type::String => write!(f, "string"),
+            Type::Void => write!(f, "void"),
+            Type::Array(inner, Some(size)) => write!(f, "[{}; {}]", inner, size),
+            Type::Array(inner, None) => write!(f, "[{}]", inner),
+        }
     }
 }
 
@@ -161,6 +187,35 @@ impl<'ctx> CodeGen<'ctx> {
                 ExylLLVMType::Basic(self.context.ptr_type(AddressSpace::default()).into())
             }
             Type::Void => ExylLLVMType::Void(self.context.void_type()),
+            Type::Array(elem_ty, len_opt) => {
+                let elem_llvm = self.llvm_var_type(elem_ty);
+
+                let array_len = len_opt.unwrap_or(0); // fixed-length or 0 for dynamic
+
+                match elem_llvm {
+                    BasicTypeEnum::IntType(int_ty) => {
+                        ExylLLVMType::Basic(int_ty.array_type(array_len as u32).into())
+                    }
+                    BasicTypeEnum::FloatType(float_ty) => {
+                        ExylLLVMType::Basic(float_ty.array_type(array_len as u32).into())
+                    }
+                    BasicTypeEnum::PointerType(ptr_ty) => {
+                        ExylLLVMType::Basic(ptr_ty.array_type(array_len as u32).into())
+                    }
+                    BasicTypeEnum::ArrayType(arr_ty) => {
+                        ExylLLVMType::Basic(arr_ty.array_type(array_len as u32).into())
+                    }
+                    BasicTypeEnum::StructType(_) => {
+                        unimplemented!("Array of struct not supported yet")
+                    }
+                    BasicTypeEnum::VectorType(_) => {
+                        unimplemented!("Array of vector not supported yet")
+                    }
+                    BasicTypeEnum::ScalableVectorType(_) => {
+                        unimplemented!("Array of scalable vector not supported yet")
+                    }
+                }
+            }
         }
     }
 }
