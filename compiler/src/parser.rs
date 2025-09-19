@@ -57,10 +57,14 @@ impl Parser {
             Some(Token::If) => self.parse_if()?,
 
             Some(_) => {
-                let expr = self.parse_primary()?;
+                let expr = self.parse_expr()?;
                 Stmt::Expr(expr)
             }
-            None => return Err(ParseError::new("Unexpected end of input while parsing a statement")),
+            None => {
+                return Err(ParseError::new(
+                    "Unexpected end of input while parsing a statement",
+                ));
+            }
         };
 
         // Only require semicolon for expressions and let-statements
@@ -137,7 +141,9 @@ impl Parser {
 
                 // variadic must be last
                 if let Some(Token::Comma) = self.peek() {
-                    return Err(ParseError::new("Variadic parameter ('...') must be the last parameter"));
+                    return Err(ParseError::new(
+                        "Variadic parameter ('...') must be the last parameter",
+                    ));
                 }
                 break;
             }
@@ -189,7 +195,10 @@ impl Parser {
             }
             other => {
                 return Err(ParseError {
-                    message: format!("Expected a function body '{{ ... }}' or ';' after signature, but found {:?}", other),
+                    message: format!(
+                        "Expected a function body '{{ ... }}' or ';' after signature, but found {:?}",
+                        other
+                    ),
                 });
             }
         };
@@ -208,6 +217,7 @@ impl Parser {
     fn parse_type(&mut self) -> Result<Type, ParseError> {
         let base_type = match self.next() {
             Some(Token::Identifier(type_name)) => match type_name.as_str() {
+                "i32" => Type::I32,
                 "i64" => Type::I64,
                 "f64" => Type::F64,
                 "bool" => Type::Bool,
@@ -215,7 +225,10 @@ impl Parser {
                 "void" => Type::Void,
                 other => {
                     return Err(ParseError {
-                        message: format!("Unknown type name '{}'. Supported types: i64, f64, bool, string, void", other),
+                        message: format!(
+                            "Unknown type name '{}'. Supported types: i64, f64, bool, string, void",
+                            other
+                        ),
                     });
                 }
             },
@@ -302,7 +315,14 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        self.parse_binary_expr(0)
+        // Parse assignment with lowest precedence: <postfix_expr> '=' <expr>
+        let left = self.parse_binary_expr(0)?;
+        if let Some(Token::Equals) = self.peek() {
+            self.next();
+            let right = self.parse_expr()?;
+            return Ok(Expr::Assign(Box::new(left), Box::new(right)));
+        }
+        Ok(left)
     }
 
     fn parse_postfix_expr(&mut self) -> Result<Expr, ParseError> {
@@ -330,7 +350,9 @@ impl Parser {
         let name = match func_expr {
             Expr::Identifier(n) => n,
             _ => {
-                return Err(ParseError::new("Only calls to named functions (identifiers) are supported"));
+                return Err(ParseError::new(
+                    "Only calls to named functions (identifiers) are supported",
+                ));
             }
         };
 

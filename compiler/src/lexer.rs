@@ -34,13 +34,23 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexError> {
                 if try_push_ellipsis(&mut tokens, &mut chars) {
                     continue;
                 }
+                // If '.' is followed by a digit, lex a float like .5
+                let mut la = chars.clone(); 
+                la.next(); // skip '.'
+                if let Some(&next_after) = la.peek() {
+                    if next_after.is_ascii_digit() {
+                        let token = lex_number(&mut chars)?;
+                        tokens.push(token);
+                        continue;
+                    }
+                }
                 // single dot
                 chars.next();
                 tokens.push(Token::Dot);
             }
 
             // --- numbers (decimal / float) ---
-            '0'..='9' | '.' => {
+            '0'..='9' => {
                 let token = lex_number(&mut chars)?;
                 tokens.push(token);
             }

@@ -493,6 +493,80 @@ impl TypeChecker {
                 }
             }
 
+            Expr::Assign(left, right) => {
+                // Type-check RHS
+                let right_typed = self.type_check_expr(*right)?;
+                let right_ty = right_typed.get_type().unwrap();
+
+                // Type-check LHS as lvalue
+                match *left {
+                    Expr::Identifier(ref name) => {
+                        let var_ty = self
+                            .scopes
+                            .lookup(name)
+                            .ok_or(TypeError::UnknownVariable(name.clone()))?
+                            .clone();
+                        if var_ty != right_ty {
+                            return Err(TypeError::TypeMismatch {
+                                expected: var_ty,
+                                found: right_ty,
+                            });
+                        }
+                        Ok(Expr::Typed(
+                            Box::new(Expr::Assign(
+                                Box::new(Expr::Identifier(name.clone())),
+                                Box::new(right_typed),
+                            )),
+                            right_ty,
+                        ))
+                    }
+                    Expr::Index(array_expr, index_expr) => {
+                        // array[index] = rhs;
+                        let array_typed = self.type_check_expr(*array_expr)?;
+                        let array_ty = array_typed.get_type().unwrap();
+
+                        let index_typed = self.type_check_expr(*index_expr)?;
+                        let index_ty = index_typed.get_type().unwrap();
+                        if index_ty != Type::I64 {
+                            return Err(TypeError::TypeMismatch {
+                                expected: Type::I64,
+                                found: index_ty,
+                            });
+                        }
+
+                        match array_ty {
+                            Type::Array(elem_ty, Some(_)) => {
+                                if *elem_ty != right_ty {
+                                    return Err(TypeError::TypeMismatch {
+                                        expected: *elem_ty,
+                                        found: right_ty,
+                                    });
+                                }
+                                Ok(Expr::Typed(
+                                    Box::new(Expr::Assign(
+                                        Box::new(Expr::Index(
+                                            Box::new(array_typed),
+                                            Box::new(index_typed),
+                                        )),
+                                        Box::new(right_typed),
+                                    )),
+                                    right_ty,
+                                ))
+                            }
+                            Type::Array(_, None) => Err(TypeError::Generic(
+                                "Assignment to dynamic array elements is not supported yet".into(),
+                            )),
+                            _ => Err(TypeError::Generic(
+                                "Left-hand side of assignment must be a variable or array element".into(),
+                            )),
+                        }
+                    }
+                    _ => Err(TypeError::Generic(
+                        "Left-hand side of assignment must be a variable or array element".into(),
+                    )),
+                }
+            }
+
             Expr::Typed(_, _) => Ok(expr), // already typed
         }
     }

@@ -1,14 +1,13 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ops::Deref;
 
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
-use inkwell::types::{ArrayType, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType};
+use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType};
 use inkwell::values::{
-    ArrayValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum, FloatValue, FunctionValue,
-    IntValue, PointerValue,
+    BasicMetadataValueEnum, BasicValue, BasicValueEnum, FloatValue, FunctionValue, IntValue,
+    PointerValue,
 };
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 
@@ -50,6 +49,10 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub fn codegen_program(&mut self, ast: &Program) -> FunctionValue<'ctx> {
+        let i64_type = self.context.i64_type();
+        let i32_type = self.context.i32_type();
+        let i8_ptr_ptr = self.context.ptr_type(AddressSpace::default());
+
         // Generate all top-level functions first
         let mut user_main: Option<FunctionValue> = None;
         for stmt in &ast.body {
@@ -62,16 +65,41 @@ impl<'ctx> CodeGen<'ctx> {
             }
         }
 
-        if let Some(main_fn) = user_main {
-            main_fn
+        // --- Generate OS entry point main ---
+        let main_type = i32_type.fn_type(&[i32_type.into(), i8_ptr_ptr.into()], false);
+        let main_fn = self.module.add_function("main", main_type, None);
+        let entry = self.context.append_basic_block(main_fn, "entry");
+        self.builder.position_at_end(entry);
+
+        // Declare runtime init
+        let runtime_init_fn = self.module.add_function(
+            "exyl_runtime_init",
+            self.context
+                .void_type()
+                .fn_type(&[i32_type.into(), i8_ptr_ptr.into()], false),
+            None,
+        );
+
+        // Call exyl_runtime_init(argc, argv)
+        let argc_val = main_fn.get_nth_param(0).unwrap().into_int_value();
+        let argv_val = main_fn.get_nth_param(1).unwrap().into_pointer_value();
+        let _ = self
+            .builder
+            .build_call(runtime_init_fn, &[argc_val.into(), argv_val.into()], "");
+
+        // Call user main if it exists
+        let user_ret = if let Some(main_func) = user_main {
+            let ret_val = self
+                .builder
+                .build_call(main_func, &[], "user_main_ret")
+                .unwrap()
+                .try_as_basic_value()
+                .left()
+                .unwrap()
+                .into_int_value();
+            ret_val
         } else {
             // Auto-generate main to run global statements
-            let i64_type = self.context.i64_type();
-            let main_type = i64_type.fn_type(&[], false);
-            let main_fn = self.module.add_function("main", main_type, None);
-            let entry = self.context.append_basic_block(main_fn, "entry");
-            self.builder.position_at_end(entry);
-
             for stmt in &ast.body {
                 match stmt {
                     Stmt::Func { .. } => {} // already generated
@@ -80,11 +108,17 @@ impl<'ctx> CodeGen<'ctx> {
                     }
                 }
             }
+            i64_type.const_zero()
+        };
 
-            let _ = self.builder.build_return(Some(&i64_type.const_zero()));
+        // Truncate i64 return to i32 for OS
+        let ret32 = self
+            .builder
+            .build_int_truncate(user_ret, i32_type, "ret32")
+            .unwrap();
+        let _ = self.builder.build_return(Some(&ret32));
 
-            main_fn
-        }
+        main_fn
     }
 
     pub fn codegen_stmt(&mut self, stmt: &Stmt) -> Option<FunctionValue<'ctx>> {
@@ -127,7 +161,6 @@ impl<'ctx> CodeGen<'ctx> {
                 self.codegen_if(condition, then_branch, else_branch.as_deref());
                 None
             }
-            _ => unimplemented!(),
         }
     }
 
@@ -152,8 +185,9 @@ impl<'ctx> CodeGen<'ctx> {
 
             Expr::Index(array_expr, index_expr) => self.codegen_index(array_expr, index_expr),
 
+            Expr::Assign(left, right) => self.codegen_assign(left, right),
+
             Expr::Typed(inner, _ty) => self.codegen_expr(inner),
-            _ => unimplemented!(),
         }
     }
 
@@ -188,12 +222,14 @@ impl<'ctx> CodeGen<'ctx> {
         match op {
             BinaryOp::LogicalAnd => {
                 // AND: if left true, evaluate right; else jump to merge (false)
-                self.builder
+                let _ = self
+                    .builder
                     .build_conditional_branch(left_bool, rhs_block, merge_block);
             }
             BinaryOp::LogicalOr => {
                 // OR: if left true, jump to merge (true); else evaluate right
-                self.builder
+                let _ = self
+                    .builder
                     .build_conditional_branch(left_bool, merge_block, rhs_block);
             }
             _ => unreachable!(),
@@ -210,7 +246,7 @@ impl<'ctx> CodeGen<'ctx> {
                 "right_bool",
             )
             .unwrap();
-        self.builder.build_unconditional_branch(merge_block);
+        let _ = self.builder.build_unconditional_branch(merge_block);
 
         // Merge block
         self.builder.position_at_end(merge_block);
@@ -242,11 +278,14 @@ impl<'ctx> CodeGen<'ctx> {
 
     pub fn llvm_var_type(&self, ty: &Type) -> BasicTypeEnum<'ctx> {
         match ty {
+            Type::I32 => self.context.i32_type().into(),
             Type::I64 => self.context.i64_type().into(),
             Type::F64 => self.context.f64_type().into(),
             Type::Bool => self.context.bool_type().into(),
             Type::String => self.context.ptr_type(AddressSpace::default()).into(),
-            Type::Void => panic!("Cannot generate an LLVM value type for 'void'. Variables cannot have type 'void'."),
+            Type::Void => panic!(
+                "Cannot generate an LLVM value type for 'void'. Variables cannot have type 'void'."
+            ),
             Type::Array(elem_ty, len_opt) => {
                 let llvm_elem = self.llvm_var_type(elem_ty);
                 let array_len = len_opt.unwrap_or(0); // 0 for dynamic later
@@ -294,11 +333,10 @@ impl<'ctx> CodeGen<'ctx> {
         let init_val = self.codegen_expr(value);
         let alloca = self.builder.build_alloca(llvm_type, &name).unwrap();
         self.builder.build_store(alloca, init_val).unwrap();
-        self
-            .scopes
+        self.scopes
             .borrow_mut()
-                                .insert(name.to_string(), (alloca, llvm_type))
-                    .unwrap_or_else(|err| panic!("Scope insertion failed: {}", err));
+            .insert(name.to_string(), (alloca, llvm_type))
+            .unwrap_or_else(|err| panic!("Scope insertion failed: {}", err));
     }
 
     fn codegen_function(
@@ -311,6 +349,12 @@ impl<'ctx> CodeGen<'ctx> {
         is_extern: bool,
         is_variadic: bool,
     ) -> Option<FunctionValue<'ctx>> {
+        let mut name = name;
+
+        if name == "main" {
+            name = "exyl_main";
+        }
+
         // Build function type
         let param_types: Vec<Type> = arguments.iter().map(|(_, ty)| ty.clone()).collect();
         let fn_type = self.llvm_function_type(
@@ -325,9 +369,10 @@ impl<'ctx> CodeGen<'ctx> {
         if is_extern {
             // External function, register and return
             function.set_linkage(Linkage::External);
-            self.functions
-                .borrow_mut()
-                .insert(name.to_string(), (function, self.llvm_type(inferred_return)));
+            self.functions.borrow_mut().insert(
+                name.to_string(),
+                (function, self.llvm_type(inferred_return)),
+            );
             return Some(function);
         }
 
@@ -346,11 +391,15 @@ impl<'ctx> CodeGen<'ctx> {
             let alloca = self.builder.build_alloca(llvm_ty, arg_name).unwrap();
             let param_val = function.get_nth_param(i as u32).unwrap();
             let _ = self.builder.build_store(alloca, param_val);
-            self
-                .scopes
+            self.scopes
                 .borrow_mut()
-                                        .insert(arg_name.clone(), (alloca, llvm_ty))
-                        .unwrap_or_else(|err| panic!("Scope insertion failed for parameter '{}': {}", arg_name, err));
+                .insert(arg_name.clone(), (alloca, llvm_ty))
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "Scope insertion failed for parameter '{}': {}",
+                        arg_name, err
+                    )
+                });
         }
 
         // Function body
@@ -377,10 +426,10 @@ impl<'ctx> CodeGen<'ctx> {
 
         self.current_func_return_type = inferred_return.clone();
 
-        self
-            .functions
-            .borrow_mut()
-            .insert(name.to_string(), (function, self.llvm_type(inferred_return)));
+        self.functions.borrow_mut().insert(
+            name.to_string(),
+            (function, self.llvm_type(inferred_return)),
+        );
 
         // Pop function scope
         self.scopes.borrow_mut().pop();
@@ -426,8 +475,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         let then_bb = self.context.append_basic_block(func, "then");
         let merge_bb = self.context.append_basic_block(func, "ifcont");
-        let else_bb = else_branch
-            .map(|_| self.context.append_basic_block(func, "else"));
+        let else_bb = else_branch.map(|_| self.context.append_basic_block(func, "else"));
 
         match else_bb {
             Some(ref else_block) => {
@@ -474,17 +522,16 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn load_identifier(&self, name: &str) -> BasicValueEnum<'ctx> {
         let variables = self.scopes.borrow();
-        let (var_ptr, ty) = variables
-            .lookup(name)
-            .unwrap_or_else(|| panic!("Undefined variable or symbol '{}' in the current scope. Did you declare it?", name));
+        let (var_ptr, ty) = variables.lookup(name).unwrap_or_else(|| {
+            panic!(
+                "Undefined variable or symbol '{}' in the current scope. Did you declare it?",
+                name
+            )
+        });
         self.builder.build_load(ty, var_ptr, name).unwrap().into()
     }
 
-    fn build_function_call(
-        &self,
-        name: &str,
-        args: &Vec<Expr>,
-    ) -> BasicValueEnum<'ctx> {
+    fn build_function_call(&self, name: &str, args: &Vec<Expr>) -> BasicValueEnum<'ctx> {
         let func_ref = self.functions.borrow();
         let func = func_ref
             .get(name)
@@ -518,13 +565,13 @@ impl<'ctx> CodeGen<'ctx> {
                     .into()
             }
             UnaryOp::Negate => match val {
-                BasicValueEnum::IntValue(i) => {
-                    self.builder.build_int_neg(i, "neg").unwrap().into()
-                }
+                BasicValueEnum::IntValue(i) => self.builder.build_int_neg(i, "neg").unwrap().into(),
                 BasicValueEnum::FloatValue(f) => {
                     self.builder.build_float_neg(f, "neg").unwrap().into()
                 }
-                _ => panic!("Unary negate is only supported for integers and floats. Got unsupported value type."),
+                _ => panic!(
+                    "Unary negate is only supported for integers and floats. Got unsupported value type."
+                ),
             },
         }
     }
@@ -544,7 +591,57 @@ impl<'ctx> CodeGen<'ctx> {
                 let right_float = right_val.into_float_value();
                 self.codegen_binary_float(op, left_float, right_float, left_val, right_val)
             }
-            _ => panic!("Binary operation received unsupported operand types. Ensure both operands are integers or both are floats."),
+            BasicValueEnum::PointerValue(left_ptr) => {
+                // Only handle equality/inequality for now
+                match op {
+                    BinaryOp::Equal | BinaryOp::NotEqual => {
+                        // Assume left_ptr and right_val are also i8* (strings)
+                        let right_ptr = right_val.into_pointer_value();
+                        let strcmp_fn = self.module.get_function("strcmp").unwrap();
+
+                        let call = self
+                            .builder
+                            .build_call(
+                                strcmp_fn,
+                                &[left_ptr.into(), right_ptr.into()],
+                                "strcmp_call",
+                            )
+                            .unwrap()
+                            .try_as_basic_value()
+                            .left()
+                            .unwrap()
+                            .into_int_value();
+
+                        // strcmp returns 0 if equal
+                        let eq = self
+                            .builder
+                            .build_int_compare(
+                                IntPredicate::EQ,
+                                call,
+                                self.context.i32_type().const_zero(),
+                                "str_eq",
+                            )
+                            .unwrap();
+
+                        if *op == BinaryOp::Equal {
+                            eq.as_basic_value_enum()
+                        } else {
+                            // !=
+                            self.builder
+                                .build_not(eq, "str_neq")
+                                .unwrap()
+                                .as_basic_value_enum()
+                        }
+                    }
+                    _ => panic!(
+                        "Unsupported binary operation for strings. Only '==' and '!=' are allowed."
+                    ),
+                }
+            }
+
+            _ => panic!(
+                "Binary operation received unsupported operand types. Ensure both operands are integers or both are floats."
+            ),
         }
     }
 
@@ -555,9 +652,21 @@ impl<'ctx> CodeGen<'ctx> {
         right: IntValue<'ctx>,
     ) -> BasicValueEnum<'ctx> {
         match op {
-            BinaryOp::Add => self.builder.build_int_add(left, right, "add").unwrap().into(),
-            BinaryOp::Subtract => self.builder.build_int_sub(left, right, "sub").unwrap().into(),
-            BinaryOp::Multiply => self.builder.build_int_mul(left, right, "mul").unwrap().into(),
+            BinaryOp::Add => self
+                .builder
+                .build_int_add(left, right, "add")
+                .unwrap()
+                .into(),
+            BinaryOp::Subtract => self
+                .builder
+                .build_int_sub(left, right, "sub")
+                .unwrap()
+                .into(),
+            BinaryOp::Multiply => self
+                .builder
+                .build_int_mul(left, right, "mul")
+                .unwrap()
+                .into(),
             BinaryOp::Divide => self
                 .builder
                 .build_int_signed_div(left, right, "div")
@@ -665,7 +774,9 @@ impl<'ctx> CodeGen<'ctx> {
                 .into(),
             BinaryOp::Modulo => self.build_fmod_call(left_raw, right_raw),
             BinaryOp::LogicalAnd | BinaryOp::LogicalOr => {
-                panic!("Logical operators (&&, ||) are only valid for boolean/integer conditions, not floats.");
+                panic!(
+                    "Logical operators (&&, ||) are only valid for boolean/integer conditions, not floats."
+                );
             }
         }
     }
@@ -709,36 +820,32 @@ impl<'ctx> CodeGen<'ctx> {
         let elem_ty = vals[0].get_type();
         for v in &vals {
             if v.get_type() != elem_ty {
-                panic!("Mismatched element types in array literal. All elements must have the same type.");
+                panic!(
+                    "Mismatched element types in array literal. All elements must have the same type."
+                );
             }
         }
 
         match vals[0] {
             BasicValueEnum::IntValue(_) => {
-                let int_vals: Vec<IntValue> = vals
-                    .into_iter()
-                    .map(|v| v.into_int_value())
-                    .collect();
+                let int_vals: Vec<IntValue> =
+                    vals.into_iter().map(|v| v.into_int_value()).collect();
                 elem_ty
                     .into_int_type()
                     .const_array(&int_vals)
                     .as_basic_value_enum()
             }
             BasicValueEnum::FloatValue(_) => {
-                let float_vals: Vec<FloatValue> = vals
-                    .into_iter()
-                    .map(|v| v.into_float_value())
-                    .collect();
+                let float_vals: Vec<FloatValue> =
+                    vals.into_iter().map(|v| v.into_float_value()).collect();
                 elem_ty
                     .into_float_type()
                     .const_array(&float_vals)
                     .as_basic_value_enum()
             }
             BasicValueEnum::PointerValue(_) => {
-                let ptr_vals: Vec<PointerValue> = vals
-                    .into_iter()
-                    .map(|v| v.into_pointer_value())
-                    .collect();
+                let ptr_vals: Vec<PointerValue> =
+                    vals.into_iter().map(|v| v.into_pointer_value()).collect();
                 elem_ty
                     .into_pointer_type()
                     .const_array(&ptr_vals)
@@ -749,27 +856,102 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn codegen_index(&self, array_expr: &Expr, index_expr: &Expr) -> BasicValueEnum<'ctx> {
+        // If array is an identifier, use pointer + GEP so index can be dynamic
+        if let &Expr::Identifier(ref name) = array_expr {
+            let variables = self.scopes.borrow();
+            let (array_ptr, array_ty) = variables
+                .lookup(name)
+                .unwrap_or_else(|| panic!("Undefined array variable '{}'", name));
+
+            let idx_val = self.codegen_expr(index_expr).into_int_value();
+            let idx_i32 = self
+                .builder
+                .build_int_truncate(idx_val, self.context.i32_type(), "idx_i32")
+                .unwrap();
+            let zero = self.context.i32_type().const_int(0, false);
+
+            let elem_ptr = unsafe {
+                self.builder
+                    .build_gep(array_ty, array_ptr, &[zero, idx_i32], "elem_ptr")
+                    .unwrap()
+            };
+
+            return self
+                .builder
+                .build_load(elem_ptr.get_type(), elem_ptr, "load_idx")
+                .unwrap()
+                .into();
+        }
+
+        // Otherwise, evaluate array value. If it's a constant array literal, only const index works
         let array_val = self.codegen_expr(array_expr);
-        let index_val = self.codegen_expr(index_expr);
-
-        let index_int = match index_val {
-            BasicValueEnum::IntValue(i) => i.get_zero_extended_constant().unwrap() as u32,
-            _ => panic!("Array index must be an integer value (i64)."),
-        };
-
         match array_val {
-            BasicValueEnum::PointerValue(_) => {
-                panic!("Dynamic array indexing is not implemented yet.")
-            }
             BasicValueEnum::ArrayValue(arr) => {
+                let index_val = self.codegen_expr(index_expr);
+                let idx_u32 = match index_val {
+                    BasicValueEnum::IntValue(i) => i
+                        .get_zero_extended_constant()
+                        .expect("Index into array literal must be a compile-time constant"),
+                    _ => panic!("Array literal indexing requires a constant integer index."),
+                } as u32;
+
                 let extracted = self
                     .builder
-                    .build_extract_value(arr, index_int, "extract")
+                    .build_extract_value(arr, idx_u32, "extract")
                     .expect("Failed to extract array element: out-of-bounds index or invalid array value.");
                 extracted.as_basic_value_enum()
             }
-            _ => panic!("Indexing is only supported on array values."),
+            _ => panic!("Indexing is only supported on array variables or array literals."),
         }
     }
 
+    fn codegen_assign(&self, left: &Expr, right: &Expr) -> BasicValueEnum<'ctx> {
+        let right_val = self.codegen_expr(right);
+
+        match left {
+            Expr::Identifier(name) => {
+                let variables = self.scopes.borrow();
+                let (var_ptr, ty) = variables.lookup(name).unwrap_or_else(|| {
+                    panic!(
+                        "Assignment to undefined variable '{}'. Declare it before use.",
+                        name
+                    )
+                });
+                let _ = self.builder.build_store(var_ptr, right_val);
+                self.builder.build_load(ty, var_ptr, name).unwrap().into()
+            }
+            Expr::Index(array_expr, index_expr) => {
+                // Only support assignment into alloca-based arrays for now
+                // Resolve array variable pointer
+                let array_ident = match **array_expr {
+                    Expr::Identifier(ref n) => n.clone(),
+                    _ => panic!("Assignment to array elements only supported for named arrays."),
+                };
+
+                let variables = self.scopes.borrow();
+                let (array_ptr, array_ty) = variables
+                    .lookup(&array_ident)
+                    .expect("Assignment to undefined array variable.");
+
+                // Compute GEP for the element index (runtime indices allowed)
+                let idx_i64 = self.codegen_expr(index_expr).into_int_value();
+                let idx_i32 = self
+                    .builder
+                    .build_int_truncate(idx_i64, self.context.i32_type(), "idx_i32")
+                    .unwrap();
+
+                let zero = self.context.i32_type().const_int(0, false);
+
+                let element_ptr = unsafe {
+                    self.builder
+                        .build_gep(array_ty, array_ptr, &[zero, idx_i32], "elem_ptr")
+                        .unwrap()
+                };
+
+                let _ = self.builder.build_store(element_ptr, right_val);
+                right_val
+            }
+            _ => panic!("Left-hand side of assignment must be an identifier or array index."),
+        }
+    }
 }

@@ -73,6 +73,9 @@ pub enum Expr {
     ArrayLiteral(Vec<Expr>),
     Index(Box<Expr>, Box<Expr>),
 
+    // --- assignment ---
+    Assign(Box<Expr>, Box<Expr>),
+
     // --- type ascription ---
     Typed(Box<Expr>, Type),
 }
@@ -114,12 +117,14 @@ impl Expr {
                 _ => None,
             },
 
+            Expr::Assign(_, right) => right.get_type(),
+
             Expr::Typed(_, ty) => Some(ty.clone()),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BinaryOp {
     // --- arithmetic ---
     Add,      // +
@@ -151,6 +156,7 @@ pub enum UnaryOp {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     // --- primitives ---
+    I32,
     I64,
     F64,
     Bool,
@@ -163,11 +169,11 @@ pub enum Type {
 
 impl Type {
     pub fn is_numeric(&self) -> bool {
-        matches!(self, Type::I64 | Type::F64)
+        matches!(self, Type::I32 | Type::I64 | Type::F64)
     }
 
     pub fn is_integer(&self) -> bool {
-        matches!(self, Type::I64)
+        matches!(self, Type::I32 | Type::I64)
     }
 
     pub fn is_float(&self) -> bool {
@@ -178,6 +184,7 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Type::I32 => write!(f, "i32"),
             Type::I64 => write!(f, "i64"),
             Type::F64 => write!(f, "f64"),
             Type::Bool => write!(f, "bool"),
@@ -197,6 +204,7 @@ pub enum ExylLLVMType<'ctx> {
 impl<'ctx> CodeGen<'ctx> {
     pub fn llvm_type(&self, ty: &Type) -> ExylLLVMType<'ctx> {
         match ty {
+            Type::I32 => ExylLLVMType::Basic(self.context.i32_type().into()),
             Type::I64 => ExylLLVMType::Basic(self.context.i64_type().into()),
             Type::F64 => ExylLLVMType::Basic(self.context.f64_type().into()),
             Type::Bool => ExylLLVMType::Basic(self.context.bool_type().into()),
