@@ -53,7 +53,51 @@ impl<'ctx> CodeGen<'ctx> {
         let i32_type = self.context.i32_type();
         let i8_ptr_ptr = self.context.ptr_type(AddressSpace::default());
 
-        // Generate all top-level functions first
+        // Predeclare all functions (extern and non-extern) so calls can resolve
+        for stmt in &ast.body {
+            if let Stmt::Func {
+                name,
+                return_type,
+                inferred_return,
+                arguments,
+                is_extern,
+                is_variadic,
+                ..
+            } = stmt
+            {
+                let mut name = name.to_string();
+                if name == "main" {
+                    name = "exyl_main".to_string();
+                }
+                // Build function type
+                let param_types: Vec<Type> = arguments.iter().map(|(_, ty)| ty.clone()).collect();
+                let fn_type = self.llvm_function_type(
+                    return_type.as_ref().unwrap_or(&Type::Void),
+                    &param_types,
+                    *is_variadic,
+                );
+                // Add if not exists
+                let function = if let Some(f) = self.module.get_function(&name) {
+                    f
+                } else {
+                    let f = self.module.add_function(&name, fn_type, None);
+                    if *is_extern {
+                        f.set_linkage(Linkage::External);
+                    }
+                    f
+                };
+                // Register in functions map
+                self.functions.borrow_mut().insert(
+                    name.clone(),
+                    (
+                        function,
+                        self.llvm_type(return_type.as_ref().unwrap_or(inferred_return)),
+                    ),
+                );
+            }
+        }
+
+        // Generate all top-level functions (bodies) and find user main
         let mut user_main: Option<FunctionValue> = None;
         for stmt in &ast.body {
             if let Stmt::Func { name, .. } = stmt {
@@ -349,10 +393,10 @@ impl<'ctx> CodeGen<'ctx> {
         is_extern: bool,
         is_variadic: bool,
     ) -> Option<FunctionValue<'ctx>> {
-        let mut name = name;
+        let mut name = name.to_string();
 
         if name == "main" {
-            name = "exyl_main";
+            name = "exyl_main".to_string();
         }
 
         // Build function type
@@ -363,16 +407,17 @@ impl<'ctx> CodeGen<'ctx> {
             is_variadic,
         );
 
-        // Add function to module
-        let function = self.module.add_function(name, fn_type, None);
+        // Get or add function to module
+        let function = if let Some(f) = self.module.get_function(&name) {
+            f
+        } else {
+            let f = self.module.add_function(&name, fn_type, None);
+            f
+        };
 
         if is_extern {
-            // External function, register and return
+            // External function, ensure linkage, and return
             function.set_linkage(Linkage::External);
-            self.functions.borrow_mut().insert(
-                name.to_string(),
-                (function, self.llvm_type(inferred_return)),
-            );
             return Some(function);
         }
 
@@ -424,8 +469,7 @@ impl<'ctx> CodeGen<'ctx> {
             };
         }
 
-        self.current_func_return_type = inferred_return.clone();
-
+        // Update inferred return after body generation
         self.functions.borrow_mut().insert(
             name.to_string(),
             (function, self.llvm_type(inferred_return)),

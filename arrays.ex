@@ -3,9 +3,6 @@ extern fun get_argv(index: i64): string;
 extern fun strcmp(a: string, b: string): i32;
 extern fun my_strtol(str: string): i32;
 
-extern fun print(format: string, ...): void;
-
-
 fun add(a: i32, b: i32): i32 {
   return a + b;
 }

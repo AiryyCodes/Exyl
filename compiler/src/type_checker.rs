@@ -46,6 +46,31 @@ impl TypeChecker {
     // ----------------------------
 
     pub fn type_check_program(&mut self, program: Program) -> Result<Program, TypeError> {
+        // First pass: predeclare all functions so cross-file and out-of-order calls resolve
+        for stmt in &program.body {
+            if let Stmt::Func {
+                name,
+                return_type,
+                arguments,
+                is_variadic,
+                ..
+            } = stmt
+            {
+                let param_types = arguments.iter().map(|(_, ty)| ty.clone()).collect();
+                let _ = self.functions.insert(
+                    name.clone(),
+                    FunctionInfo::new_user(
+                        name.clone(),
+                        param_types,
+                        return_type.clone(),
+                        return_type.clone().unwrap_or(Type::Void),
+                        *is_variadic,
+                    ),
+                );
+            }
+        }
+
+        // Second pass: type-check all statements
         let body: Result<Vec<_>, _> = program
             .body
             .into_iter()
@@ -188,7 +213,9 @@ impl TypeChecker {
         // Insert variable into type environment
         self.scopes
             .insert(name.clone(), var_type.clone())
-            .unwrap_or_else(|err| panic!("Type environment insertion failed for '{}': {}", name, err));
+            .unwrap_or_else(|err| {
+                panic!("Type environment insertion failed for '{}': {}", name, err)
+            });
 
         Ok(Stmt::Let {
             name,
@@ -557,7 +584,8 @@ impl TypeChecker {
                                 "Assignment to dynamic array elements is not supported yet".into(),
                             )),
                             _ => Err(TypeError::Generic(
-                                "Left-hand side of assignment must be a variable or array element".into(),
+                                "Left-hand side of assignment must be a variable or array element"
+                                    .into(),
                             )),
                         }
                     }
