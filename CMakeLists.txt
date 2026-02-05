@@ -1,0 +1,12 @@
+cmake_minimum_required(VERSION 4.1)
+project(Exyl)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+set(CMAKE_CXX_STANDARD 23)
+
+file(GLOB_RECURSE COMPILER_SOURCES
+    "Compiler/**.cpp"
+)
+
+add_executable(exylc ${COMPILER_SOURCES})

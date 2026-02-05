@@ -1,0 +1,3 @@
+let test "Hello, World!";
+
+let test_2 = "Hello, Test2!";
