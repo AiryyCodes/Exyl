@@ -6,10 +6,21 @@
 enum class TokenId
 {
     Symbol,
+
     String,
+
     Let,
+    Fun,
+
     Equals,
+
+    LParen,
+    RParen,
+    LBrace,
+    RBrace,
+
     Semicolon,
+
     Invalid,
     EndOfFile,
 };

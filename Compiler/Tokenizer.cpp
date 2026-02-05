@@ -7,6 +7,7 @@
 
 static const std::unordered_map<std::string, TokenId> KEYWORDS = {
     {"let", TokenId::Let},
+    {"fun", TokenId::Fun},
 };
 
 char advance(Tokenizer &tokenizer)
@@ -182,6 +183,19 @@ void tokenize(const std::string &code, Tokenization &tokenization)
             make_token(tokenizer, TokenId::Equals, start);
             continue;
 
+        case '(':
+            make_token(tokenizer, TokenId::LParen, start);
+            continue;
+        case ')':
+            make_token(tokenizer, TokenId::RParen, start);
+            continue;
+        case '{':
+            make_token(tokenizer, TokenId::LBrace, start);
+            continue;
+        case '}':
+            make_token(tokenizer, TokenId::RBrace, start);
+            continue;
+
         case ';':
             make_token(tokenizer, TokenId::Semicolon, start);
             continue;
@@ -218,14 +232,30 @@ std::string get_token_id_name(TokenId id)
     {
     case TokenId::Symbol:
         return "Symbol";
+
     case TokenId::String:
         return "String";
+
     case TokenId::Let:
         return "Let";
+    case TokenId::Fun:
+        return "Fun";
+
     case TokenId::Equals:
         return "Equals";
+
+    case TokenId::LParen:
+        return "LParen";
+    case TokenId::RParen:
+        return "RParen";
+    case TokenId::LBrace:
+        return "LBrace";
+    case TokenId::RBrace:
+        return "RBrace";
+
     case TokenId::Semicolon:
         return "Semicolon";
+
     case TokenId::Invalid:
         return "Invalid";
     case TokenId::EndOfFile:
