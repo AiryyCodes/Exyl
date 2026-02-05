@@ -8,6 +8,8 @@
 static const std::unordered_map<std::string, TokenId> KEYWORDS = {
     {"let", TokenId::Let},
     {"fun", TokenId::Fun},
+    {"true", TokenId::True},
+    {"false", TokenId::False},
 };
 
 char advance(Tokenizer &tokenizer)
@@ -139,6 +141,34 @@ Token lex_string(Tokenizer &tokenizer, int start)
     };
 }
 
+Token lex_number(Tokenizer &tokenizer, int start)
+{
+    while (isdigit(current(tokenizer)))
+    {
+        advance(tokenizer);
+    }
+
+    bool isFloat = false;
+
+    if (current(tokenizer) == '.' && isdigit(peek(tokenizer)))
+    {
+        isFloat = true;
+
+        // Consume '.'
+        advance(tokenizer);
+
+        while (isdigit(current(tokenizer)))
+        {
+            advance(tokenizer);
+        }
+    }
+
+    return {
+        .Id = isFloat ? TokenId::Float : TokenId::Int,
+        .Name = tokenizer.Code.substr(start, tokenizer.Cursor - start),
+    };
+}
+
 void make_token(Tokenizer &tokenizer, TokenId id, int start)
 {
     tokenizer.Tokens.push_back({
@@ -205,7 +235,11 @@ void tokenize(const std::string &code, Tokenization &tokenization)
             continue;
         }
 
-        if (isalpha(c))
+        if (isdigit(c))
+        {
+            add_token(tokenizer, lex_number(tokenizer, start));
+        }
+        else if (isalpha(c))
         {
             add_token(tokenizer, lex_symbol(tokenizer, start));
         }
@@ -223,6 +257,8 @@ void tokenize(const std::string &code, Tokenization &tokenization)
         printf("%s: %s\n", get_token_id_name(token.Id).c_str(), token.Name.c_str());
     }
 
+    tokenization.Tokens = tokenizer.Tokens;
+
     printf("\n");
 }
 
@@ -235,6 +271,14 @@ std::string get_token_id_name(TokenId id)
 
     case TokenId::String:
         return "String";
+    case TokenId::Int:
+        return "Int";
+    case TokenId::Float:
+        return "Float";
+    case TokenId::True:
+        return "True";
+    case TokenId::False:
+        return "False";
 
     case TokenId::Let:
         return "Let";

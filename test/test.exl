@@ -1,3 +1,6 @@
 fun main() {
-    let hello_world = "Hello, World!";
+    let int = 69;
+    let float = 420.0;
+    let string = "Hello, World!";
+    let bool = true;
 }

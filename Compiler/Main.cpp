@@ -1,14 +1,14 @@
+#include "Parser.h"
 #include "Tokenizer.h"
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <print>
 #include <sstream>
 #include <string>
 
 int main(int argc, char *argv[])
 {
-    Tokenization tokenization;
-
     if (argc != 2)
     {
         printf("Usage: %s <input>.exl\n", argv[0]);
@@ -27,7 +27,18 @@ int main(int argc, char *argv[])
     std::stringstream buffer;
     buffer << stream.rdbuf();
 
+    Tokenization tokenization{};
+
     tokenize(buffer.str(), tokenization);
+
+    auto root = parse(tokenization);
+    if (!root)
+    {
+        printf("Failed to parse tokens\n");
+        return EXIT_FAILURE;
+    }
+
+    root->print();
 
     return EXIT_SUCCESS;
 }

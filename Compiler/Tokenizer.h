@@ -8,6 +8,10 @@ enum class TokenId
     Symbol,
 
     String,
+    Int,
+    Float,
+    True,
+    False,
 
     Let,
     Fun,
