@@ -226,6 +226,9 @@ void tokenize(const std::string &code, Tokenization &tokenization)
             make_token(tokenizer, TokenId::RBrace, start);
             continue;
 
+        case ':':
+            make_token(tokenizer, TokenId::Colon, start);
+            continue;
         case ';':
             make_token(tokenizer, TokenId::Semicolon, start);
             continue;
@@ -245,8 +248,7 @@ void tokenize(const std::string &code, Tokenization &tokenization)
         }
         else
         {
-            add_token(tokenizer, {.Id = TokenId::Invalid,
-                                  .Name = std::string(1, c)});
+            add_token(tokenizer, {.Id = TokenId::Invalid, .Name = std::string(1, c)});
         }
     }
 
@@ -297,6 +299,8 @@ std::string get_token_id_name(TokenId id)
     case TokenId::RBrace:
         return "RBrace";
 
+    case TokenId::Colon:
+        return "Colon";
     case TokenId::Semicolon:
         return "Semicolon";
 

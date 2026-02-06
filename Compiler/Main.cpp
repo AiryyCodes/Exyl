@@ -1,9 +1,9 @@
 #include "Parser.h"
+#include "Semantics.h"
 #include "Tokenizer.h"
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
-#include <print>
 #include <sstream>
 #include <string>
 
@@ -37,6 +37,9 @@ int main(int argc, char *argv[])
         printf("Failed to parse tokens\n");
         return EXIT_FAILURE;
     }
+
+    SemanticAnalyzer semanticAnalyzer;
+    semanticAnalyzer.analyze(root.get());
 
     root->print();
 

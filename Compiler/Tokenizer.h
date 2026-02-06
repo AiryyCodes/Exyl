@@ -23,6 +23,7 @@ enum class TokenId
     LBrace,
     RBrace,
 
+    Colon,
     Semicolon,
 
     Invalid,

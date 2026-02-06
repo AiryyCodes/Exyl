@@ -1,9 +1,11 @@
 #include "Parser.h"
 #include "Tokenizer.h"
+#include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <print>
 #include <stdexcept>
 #include <string>
 
@@ -83,13 +85,24 @@ std::unique_ptr<ASTNode> Parser::parse_func_decl()
 
     auto node = std::make_unique<ASTNode>();
     node->Type = NodeType::FuncDecl;
-    node->Data = FuncDeclNode{
-        .Name = symbol.Name,
-    };
 
     // TODO: Parse function params
     expect(TokenId::LParen);
     expect(TokenId::RParen);
+
+    TypeRef typeRef;
+    if (current().Id == TokenId::Colon)
+    {
+        expect(TokenId::Colon);
+
+        Token returnType = expect(TokenId::Symbol);
+        typeRef.Name = returnType.Name;
+    }
+
+    node->Data = FuncDeclNode{
+        .Name = symbol.Name,
+        .ReturnTypeRef = typeRef,
+    };
 
     node->Children = parse_block();
 
@@ -214,7 +227,7 @@ void ASTNode::print()
         case NodeType::FuncDecl:
         {
             FuncDeclNode func = std::get<FuncDeclNode>(child->Data);
-            printf("Function: %s\n", func.Name.c_str());
+            printf("Function: %s | Type: %s\n", func.Name.c_str(), func.ReturnType->get_name().c_str());
             child->print();
             break;
         }
@@ -222,7 +235,12 @@ void ASTNode::print()
         case NodeType::VarDecl:
         {
             VarDeclNode var = std::get<VarDeclNode>(child->Data);
-            printf("Variable: %s | Value: %s\n", var.Name.c_str(), var.Initializer.RawValue.c_str());
+            assert(var.VarType && "VarType not set");
+
+            printf("Variable: %s | Value: %s | Type: %s\n",
+                   var.Name.c_str(),
+                   var.Initializer.RawValue.c_str(),
+                   var.VarType->get_name().c_str());
             break;
         }
         }

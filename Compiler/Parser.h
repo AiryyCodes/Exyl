@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Tokenizer.h"
+#include "Type.h"
 #include <memory>
 #include <string>
 #include <variant>
@@ -13,9 +14,18 @@ enum class NodeType
     VarDecl,
 };
 
+struct TypeRef
+{
+    // The parsed type name (ex. void, i32, string, etc...)
+    std::string Name;
+};
+
 struct FuncDeclNode
 {
     std::string Name;
+
+    TypeRef ReturnTypeRef;
+    Type *ReturnType;
 };
 
 enum class LiteralType
@@ -39,12 +49,16 @@ struct Literal
     LiteralType Type;
     LiteralValue Value;
     std::string RawValue;
+
+    struct Type *ExprType = nullptr;
 };
 
 struct VarDeclNode
 {
     std::string Name;
     Literal Initializer;
+
+    Type *VarType = nullptr;
 };
 
 using ASTData = std::variant<std::monostate, FuncDeclNode, VarDeclNode>;

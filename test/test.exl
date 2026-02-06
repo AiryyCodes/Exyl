@@ -1,4 +1,4 @@
-fun main() {
+fun main(): i32 {
     let int = 69;
     let float = 420.0;
     let string = "Hello, World!";
