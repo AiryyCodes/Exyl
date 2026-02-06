@@ -1,11 +1,9 @@
 #include "Parser.h"
 #include "Tokenizer.h"
+
 #include <cassert>
-#include <cmath>
 #include <cstdio>
-#include <cstdlib>
 #include <memory>
-#include <print>
 #include <stdexcept>
 #include <string>
 
@@ -140,17 +138,28 @@ std::unique_ptr<ASTNode> Parser::parse_let_decl()
 {
     expect(TokenId::Let);
 
+    auto node = std::make_unique<ASTNode>();
+    node->Type = NodeType::VarDecl;
+
     Token symbol = expect(TokenId::Symbol);
+
+    VarDeclNode varDecl;
+    varDecl.Name = symbol.Name;
+
+    if (current().Id == TokenId::Colon)
+    {
+        expect(TokenId::Colon);
+
+        Token type = expect(TokenId::Symbol);
+        varDecl.VarTypeRef = TypeRef{.Name = type.Name};
+    }
 
     // Consume '='
     advance();
 
-    auto node = std::make_unique<ASTNode>();
-    node->Type = NodeType::VarDecl;
-    node->Data = VarDeclNode{
-        .Name = symbol.Name,
-        .Initializer = parse_literal(),
-    };
+    varDecl.Initializer = parse_literal();
+
+    node->Data = varDecl;
 
     expect(TokenId::Semicolon);
 
@@ -235,7 +244,6 @@ void ASTNode::print()
         case NodeType::VarDecl:
         {
             VarDeclNode var = std::get<VarDeclNode>(child->Data);
-            assert(var.VarType && "VarType not set");
 
             printf("Variable: %s | Value: %s | Type: %s\n",
                    var.Name.c_str(),

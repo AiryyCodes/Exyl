@@ -3,6 +3,7 @@
 #include "Parser.h"
 #include "Type.h"
 
+#include <format>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -22,8 +23,8 @@ struct Symbol
 
 struct Scope
 {
-    std::unordered_map<std::string, Symbol *> Symbols;
-    Scope *Parent = nullptr;
+    std::unordered_map<std::string, std::unique_ptr<Symbol>> Symbols;
+    std::unique_ptr<Scope> Parent;
 };
 
 class SymbolTable
@@ -31,38 +32,43 @@ class SymbolTable
 public:
     void push_scope()
     {
-        Current = new Scope{.Symbols = {}, .Parent = Current};
+        auto scope = std::make_unique<Scope>();
+        scope->Parent = std::move(Current);
+        Current = std::move(scope);
     }
 
     void pop_scope()
     {
-        Scope *old = Current;
-        Current = Current->Parent;
-        delete old;
+        if (!Current)
+            return;
+
+        Current = std::move(Current->Parent);
     }
 
-    bool declare(Symbol *sym)
+    bool declare(std::unique_ptr<Symbol> sym)
     {
-        if (Current->Symbols.contains(sym->Name))
+        auto &symbols = Current->Symbols;
+
+        if (symbols.contains(sym->Name))
             return false;
 
-        Current->Symbols[sym->Name] = sym;
+        symbols.emplace(sym->Name, std::move(sym));
         return true;
     }
 
-    Symbol *lookup(const std::string &name)
+    Symbol *lookup(const std::string &name) const
     {
-        for (Scope *s = Current; s; s = s->Parent)
+        for (Scope *s = Current.get(); s; s = s->Parent.get())
         {
             auto it = s->Symbols.find(name);
             if (it != s->Symbols.end())
-                return it->second;
+                return it->second.get();
         }
         return nullptr;
     }
 
 private:
-    Scope *Current = nullptr;
+    std::unique_ptr<Scope> Current;
 };
 
 class SemanticAnalyzer
@@ -70,9 +76,19 @@ class SemanticAnalyzer
 public:
     void analyze(ASTNode *root);
 
+    bool has_errors() const { return m_ErrorCount > 0; }
+
 private:
     SymbolTable m_Symbols;
+    int m_ErrorCount = 0;
 
+    template <typename... Args>
+    void error(std::format_string<Args...> fmt, Args &&...args)
+    {
+        m_ErrorCount++;
+        std::string msg = std::format(fmt, std::forward<Args>(args)...);
+        fprintf(stderr, "Semantic error: %s\n", msg.c_str());
+    }
     void visit(ASTNode *node);
     void visit_program(ASTNode *node);
     void visit_func_decl(ASTNode *node, FuncDeclNode &func);
@@ -81,4 +97,6 @@ private:
     Type *analyze_literal(Literal &literal);
 
     Type *resolve_type(const std::string &name);
+
+    bool is_assignable(Type *target, Type *value);
 };

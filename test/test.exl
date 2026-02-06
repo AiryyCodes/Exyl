@@ -1,6 +1,6 @@
-fun main(): i32 {
-    let int = 69;
-    let float = 420.0;
-    let string = "Hello, World!";
-    let bool = true;
+fun main(): void {
+    let int: i64 = 69;
+    let float: f32 = 420.0;
+    let string: string = "Hello, World!";
+    let bool: bool = true;
 }

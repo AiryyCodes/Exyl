@@ -2,7 +2,7 @@
 #include "Parser.h"
 #include "Type.h"
 
-#include <cstdio>
+#include <string>
 
 void SemanticAnalyzer::analyze(ASTNode *root)
 {
@@ -43,14 +43,14 @@ void SemanticAnalyzer::visit_func_decl(ASTNode *node, FuncDeclNode &func)
 {
     func.ReturnType = func.ReturnTypeRef.Name.empty() ? &Types::Void : resolve_type(func.ReturnTypeRef.Name);
 
-    auto *sym = new Symbol{
+    auto sym = std::make_unique<Symbol>(Symbol{
         func.Name,
         SymbolKind::Function,
-        func.ReturnType};
+        func.ReturnType});
 
-    if (!m_Symbols.declare(sym))
+    if (!m_Symbols.declare(std::move(sym)))
     {
-        printf("Semantic error: redeclared function '%s'\n", func.Name.c_str());
+        error("redeclared function '{}'", func.Name.c_str());
     }
 
     m_Symbols.push_scope();
@@ -64,17 +64,50 @@ void SemanticAnalyzer::visit_func_decl(ASTNode *node, FuncDeclNode &func)
 void SemanticAnalyzer::visit_var_decl(ASTNode *, VarDeclNode &var)
 {
     Type *initType = analyze_literal(var.Initializer);
-    var.VarType = initType;
+    Type *declaredType = nullptr;
+    if (!var.VarTypeRef.Name.empty())
+    {
+        declaredType = resolve_type(var.VarTypeRef.Name);
+    }
 
-    auto *sym = new Symbol{
+    if (initType == &Types::Error || declaredType == &Types::Error)
+    {
+        var.VarType = &Types::Error;
+        return;
+    }
+
+    Type *resultType = nullptr;
+
+    if (declaredType)
+    {
+        if (!is_assignable(declaredType, initType))
+        {
+            error("Cannot assign {} to variable of type {}",
+                  initType->get_name(),
+                  declaredType->get_name());
+            resultType = &Types::Error;
+        }
+        else
+        {
+            resultType = declaredType;
+        }
+    }
+    else
+    {
+        resultType = initType;
+    }
+
+    var.VarType = resultType;
+
+    auto sym = std::make_unique<Symbol>(Symbol{
         .Name = var.Name,
         .Kind = SymbolKind::Variable,
         .TypeInfo = var.VarType,
-    };
+    });
 
-    if (!m_Symbols.declare(sym))
+    if (!m_Symbols.declare(std::move(sym)))
     {
-        printf("Semantic error: redeclared variable '%s'\n", var.Name.c_str());
+        error("redeclared variable '{}'", var.Name);
     }
 }
 
@@ -101,6 +134,16 @@ Type *SemanticAnalyzer::resolve_type(const std::string &name)
         return it->second;
 
     // For now: unknown type = Error
-    printf("Unknown type: %s\n", name.c_str());
+    error("Unknown type: {}", name);
     return &Types::Error;
+}
+
+bool SemanticAnalyzer::is_assignable(Type *target, Type *value)
+{
+    if (target == value)
+        return true;
+
+    // TODO: Add implicit conversion (maybe)
+
+    return false;
 }

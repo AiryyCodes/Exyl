@@ -41,6 +41,12 @@ int main(int argc, char *argv[])
     SemanticAnalyzer semanticAnalyzer;
     semanticAnalyzer.analyze(root.get());
 
+    if (semanticAnalyzer.has_errors())
+    {
+        fprintf(stderr, "Compilation failed: semantic errors detected\n");
+        return EXIT_FAILURE;
+    }
+
     root->print();
 
     return EXIT_SUCCESS;

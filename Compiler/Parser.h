@@ -25,7 +25,7 @@ struct FuncDeclNode
     std::string Name;
 
     TypeRef ReturnTypeRef;
-    Type *ReturnType;
+    Type *ReturnType = &Types::Error;
 };
 
 enum class LiteralType
@@ -58,7 +58,8 @@ struct VarDeclNode
     std::string Name;
     Literal Initializer;
 
-    Type *VarType = nullptr;
+    TypeRef VarTypeRef;
+    Type *VarType = &Types::Error;
 };
 
 using ASTData = std::variant<std::monostate, FuncDeclNode, VarDeclNode>;
