@@ -86,6 +86,32 @@ std::unique_ptr<ASTNode> Parser::parse_func_decl()
 
     // TODO: Parse function params
     expect(TokenId::LParen);
+
+    std::vector<FuncParam> params;
+
+    if (current().Id != TokenId::RParen)
+    {
+        while (true)
+        {
+            Token paramName = expect(TokenId::Symbol);
+            expect(TokenId::Colon);
+            Token paramType = expect(TokenId::Symbol);
+
+            params.push_back(FuncParam{
+                .Name = paramName.Name,
+                .Type = TypeRef{.Name = paramType.Name},
+            });
+
+            if (current().Id == TokenId::Comma)
+            {
+                advance(); // consume comma
+                continue;
+            }
+
+            break;
+        }
+    }
+
     expect(TokenId::RParen);
 
     TypeRef typeRef;
@@ -99,6 +125,7 @@ std::unique_ptr<ASTNode> Parser::parse_func_decl()
 
     node->Data = FuncDeclNode{
         .Name = symbol.Name,
+        .Params = std::move(params),
         .ReturnTypeRef = typeRef,
     };
 

@@ -226,6 +226,9 @@ void tokenize(const std::string &code, Tokenization &tokenization)
             make_token(tokenizer, TokenId::RBrace, start);
             continue;
 
+        case ',':
+            make_token(tokenizer, TokenId::Comma, start);
+            continue;
         case ':':
             make_token(tokenizer, TokenId::Colon, start);
             continue;
@@ -254,16 +257,14 @@ void tokenize(const std::string &code, Tokenization &tokenization)
 
     add_eof(tokenizer);
 
-    /*
     for (const auto &token : tokenizer.Tokens)
     {
         printf("%s: %s\n", get_token_id_name(token.Id).c_str(), token.Name.c_str());
     }
-    */
 
     tokenization.Tokens = tokenizer.Tokens;
 
-    // printf("\n");
+    printf("\n");
 }
 
 std::string get_token_id_name(TokenId id)
@@ -301,6 +302,8 @@ std::string get_token_id_name(TokenId id)
     case TokenId::RBrace:
         return "RBrace";
 
+    case TokenId::Comma:
+        return "Comma";
     case TokenId::Colon:
         return "Colon";
     case TokenId::Semicolon:

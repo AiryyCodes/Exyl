@@ -20,9 +20,16 @@ struct TypeRef
     std::string Name;
 };
 
+struct FuncParam
+{
+    std::string Name;
+    TypeRef Type;
+};
+
 struct FuncDeclNode
 {
     std::string Name;
+    std::vector<FuncParam> Params;
 
     TypeRef ReturnTypeRef;
     Type *ReturnType = &Types::Error;
