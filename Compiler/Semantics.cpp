@@ -25,6 +25,9 @@ void SemanticAnalyzer::visit(ASTNode *node)
     case NodeType::FuncDecl:
         visit_func_decl(node, std::get<FuncDeclNode>(node->Data));
         break;
+    case NodeType::FuncCall:
+        visit_func_call(node, std::get<FuncCallNode>(node->Data));
+        break;
 
     case NodeType::VarDecl:
         visit_var_decl(node, std::get<VarDeclNode>(node->Data));
@@ -51,10 +54,19 @@ void SemanticAnalyzer::visit_func_decl(ASTNode *node, FuncDeclNode &func)
 {
     func.ReturnType = func.ReturnTypeRef.Name.empty() ? &Types::Unknown : resolve_type(func.ReturnTypeRef.Name);
 
+    auto funcType = std::make_unique<FunctionType>();
+    funcType->ReturnType = func.ReturnType;
+
+    for (const auto &param : func.Params)
+    {
+        funcType->ParamTypes.push_back(resolve_type(param.Type.Name));
+    }
+
     auto sym = std::make_unique<Symbol>(Symbol{
         .Name = func.Name,
         .Kind = SymbolKind::Function,
-        .TypeInfo = func.ReturnType,
+        .TypeInfo = nullptr,
+        .FunctionInfo = std::move(funcType),
     });
 
     if (!m_Symbols.declare(std::move(sym)))
@@ -104,6 +116,44 @@ void SemanticAnalyzer::visit_func_decl(ASTNode *node, FuncDeclNode &func)
     m_InferredReturnType = nullptr;
 
     m_Symbols.pop_scope();
+}
+
+void SemanticAnalyzer::visit_func_call(ASTNode *node, FuncCallNode &call)
+{
+    // TODO: Check if parameters exists in symbol list
+    // TODO: Check if parameter type is the correct type for that parameter
+
+    Symbol *sym = m_Symbols.lookup(call.Name);
+    if (!sym || sym->Kind != SymbolKind::Function)
+    {
+        error("call to undeclared function '{}'", call.Name);
+        return;
+    }
+
+    auto &func = sym->FunctionInfo;
+
+    if (call.Args.size() != func->ParamTypes.size())
+    {
+        error("function '{}' expects {} arguments, got {}",
+              call.Name,
+              func->ParamTypes.size(),
+              call.Args.size());
+        return;
+    }
+
+    for (size_t i = 0; i < call.Args.size(); ++i)
+    {
+        Type *argType = visit_expr(call.Args[i].get());
+        Type *paramType = func->ParamTypes[i];
+
+        if (!is_assignable(paramType, argType))
+        {
+            error("cannot pass '{}' as argument {} to parameter of type '{}'",
+                  argType->get_name(),
+                  i + 1,
+                  paramType->get_name());
+        }
+    }
 }
 
 void SemanticAnalyzer::visit_var_decl(ASTNode *, VarDeclNode &var)

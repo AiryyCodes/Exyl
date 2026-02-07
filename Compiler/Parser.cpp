@@ -26,6 +26,15 @@ Token Parser::advance()
     return current();
 }
 
+Token Parser::peek()
+{
+    int offset = 1;
+    if (Index + offset >= Tokenization.Tokens.size())
+        return Tokenization.Tokens.back();
+
+    return Tokenization.Tokens[Index + offset];
+}
+
 Token Parser::expect(TokenId id)
 {
     Token token = current();
@@ -134,6 +143,46 @@ std::unique_ptr<ASTNode> Parser::parse_func_decl()
     return node;
 }
 
+std::unique_ptr<ASTNode> Parser::parse_func_call()
+{
+    Token ident = expect(TokenId::Symbol);
+
+    // Consume '('
+    advance();
+
+    std::vector<std::unique_ptr<ASTNode>> args;
+
+    if (current().Id != TokenId::RParen)
+    {
+        while (true)
+        {
+            auto argNode = parse_expr();
+            args.push_back(std::move(argNode));
+
+            if (current().Id == TokenId::Comma)
+            {
+                advance(); // consume comma
+                continue;
+            }
+
+            break;
+        }
+    }
+
+    expect(TokenId::RParen);
+
+    expect(TokenId::Semicolon);
+
+    auto node = std::make_unique<ASTNode>();
+    node->Type = NodeType::FuncCall;
+    node->Data = FuncCallNode{
+        .Name = ident.Name,
+        .Args = std::move(args),
+    };
+
+    return node;
+}
+
 std::vector<std::unique_ptr<ASTNode>> Parser::parse_block()
 {
     expect(TokenId::LBrace);
@@ -150,6 +199,14 @@ std::vector<std::unique_ptr<ASTNode>> Parser::parse_block()
         case TokenId::Return:
             children.push_back(parse_return_stmt());
             break;
+        case TokenId::Symbol:
+        {
+            if (peek().Id == TokenId::LParen)
+            {
+                children.push_back(parse_func_call());
+                break;
+            }
+        }
 
         default:
             printf("Unexpected token '%s'\n",
@@ -398,6 +455,22 @@ void ASTNode::print(int indent)
                func.ReturnType->get_name().c_str());
         break;
     }
+    case NodeType::FuncCall:
+    {
+        FuncCallNode &call = std::get<FuncCallNode>(Data);
+        print_indent();
+        printf("FuncCall: %s\n",
+               call.Name.c_str());
+
+        for (const auto &arg : call.Args)
+        {
+            print_indent();
+            printf("  Arg:\n");
+            arg->print(indent + 2);
+        }
+
+        break;
+    }
 
     case NodeType::VarDecl:
     {
@@ -413,7 +486,7 @@ void ASTNode::print(int indent)
     case NodeType::ReturnStmt:
     {
         print_indent();
-        printf("Return\n");
+        printf("Return:\n");
 
         auto &ret = std::get<ReturnStmtNode>(Data);
         if (ret.Expr)

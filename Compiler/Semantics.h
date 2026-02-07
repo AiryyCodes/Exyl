@@ -8,6 +8,12 @@
 #include <string>
 #include <unordered_map>
 
+struct FunctionType
+{
+    Type *ReturnType;
+    std::vector<Type *> ParamTypes;
+};
+
 enum class SymbolKind
 {
     Variable,
@@ -19,6 +25,7 @@ struct Symbol
     std::string Name;
     SymbolKind Kind;
     Type *TypeInfo;
+    std::unique_ptr<FunctionType> FunctionInfo;
 };
 
 struct Scope
@@ -98,6 +105,7 @@ private:
 
     void visit_program(ASTNode *node);
     void visit_func_decl(ASTNode *node, FuncDeclNode &func);
+    void visit_func_call(ASTNode *node, FuncCallNode &call);
     void visit_var_decl(ASTNode *node, VarDeclNode &var);
 
     Type *visit_expr(ASTNode *node);

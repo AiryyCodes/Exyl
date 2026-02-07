@@ -2,6 +2,7 @@
 
 #include "Tokenizer.h"
 #include "Type.h"
+
 #include <memory>
 #include <string>
 #include <variant>
@@ -13,6 +14,7 @@ enum class NodeType
 {
     Program,
     FuncDecl,
+    FuncCall,
     ReturnStmt,
     VarDecl,
     LiteralExpr,
@@ -73,6 +75,18 @@ struct FuncDeclNode
     Type *ReturnType = &Types::Error;
 };
 
+struct FuncCallParam
+{
+    std::string Name;
+};
+
+struct FuncCallNode
+{
+    std::string Name;
+
+    std::vector<std::unique_ptr<ASTNode>> Args;
+};
+
 struct ReturnStmtNode
 {
     std::unique_ptr<ASTNode> Expr;
@@ -113,6 +127,7 @@ struct VarDeclNode
 using ASTData = std::variant<
     std::monostate,
     FuncDeclNode,
+    FuncCallNode,
     ReturnStmtNode,
     VarDeclNode,
     LiteralExprNode,
@@ -140,12 +155,14 @@ struct Parser
 
     Token &current();
     Token advance();
+    Token peek();
     Token expect(TokenId id);
 
     bool is_at_end();
 
     std::unique_ptr<ASTNode> parse_program();
     std::unique_ptr<ASTNode> parse_func_decl();
+    std::unique_ptr<ASTNode> parse_func_call();
     std::vector<std::unique_ptr<ASTNode>> parse_block();
 
     std::unique_ptr<ASTNode> parse_let_decl();

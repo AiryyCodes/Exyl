@@ -1,4 +1,4 @@
-fun foo(a: i32, b: i32) {
+fun add(a: i64, b: i64): i64 {
     return a + b;
 }
 
@@ -7,4 +7,9 @@ fun main(): void {
     let float: f32 = 420.0;
     let string: string = "Hello, World!";
     let bool: bool = true;
+
+    let a = 1;
+    let b = 1;
+
+    add(a, b);
 }
