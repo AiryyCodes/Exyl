@@ -147,6 +147,9 @@ std::vector<std::unique_ptr<ASTNode>> Parser::parse_block()
         case TokenId::Let:
             children.push_back(parse_let_decl());
             break;
+        case TokenId::Return:
+            children.push_back(parse_return_stmt());
+            break;
 
         default:
             printf("Unexpected token '%s'\n",
@@ -240,6 +243,126 @@ Literal Parser::parse_literal()
     }
 }
 
+std::unique_ptr<ASTNode> Parser::parse_expr()
+{
+    return parse_binary_expr(0);
+}
+
+std::unique_ptr<ASTNode> Parser::parse_primary()
+{
+    Token tok = current();
+
+    if (tok.Id == TokenId::Int)
+    {
+        advance();
+        auto node = std::make_unique<ASTNode>();
+        node->Type = NodeType::LiteralExpr;
+        node->Data = LiteralExprNode{
+            .LitType = LiteralExprNode::TypeKind::Int,
+            .Value = tok.Name,
+        };
+        return node;
+    }
+    else if (tok.Id == TokenId::String)
+    {
+        advance();
+        auto node = std::make_unique<ASTNode>();
+        node->Type = NodeType::LiteralExpr;
+        node->Data = LiteralExprNode{
+            .LitType = LiteralExprNode::TypeKind::String,
+            .Value = tok.Name,
+        };
+        return node;
+    }
+    else if (tok.Id == TokenId::Symbol)
+    {
+        advance();
+        auto node = std::make_unique<ASTNode>();
+        node->Type = NodeType::IdentifierExpr;
+        node->Data = IdentifierExprNode{.Name = tok.Name};
+        return node;
+    }
+    else if (tok.Id == TokenId::LParen)
+    {
+        // consume '('
+        advance();
+        auto expr = parse_expr();
+        expect(TokenId::RParen);
+        return expr;
+    }
+
+    throw std::runtime_error(
+        "Unexpected token in primary expression: " +
+        get_token_id_name(tok.Id));
+}
+
+std::unique_ptr<ASTNode> Parser::parse_binary_expr(int minPrec)
+{
+    auto lhs = parse_primary();
+
+    while (true)
+    {
+        Token op = current();
+        int prec = get_precedence(op.Id);
+
+        if (prec < minPrec)
+            break;
+
+        advance(); // consume operator
+
+        auto rhs = parse_binary_expr(prec + 1);
+
+        auto node = std::make_unique<ASTNode>();
+        node->Type = NodeType::BinaryExpr;
+
+        node->Data = BinaryExprNode{
+            .Op = op.Id,
+            .LHS = std::move(lhs),
+            .RHS = std::move(rhs),
+        };
+
+        lhs = std::move(node);
+    }
+
+    return lhs;
+}
+
+std::unique_ptr<ASTNode> Parser::parse_return_stmt()
+{
+    expect(TokenId::Return);
+
+    std::unique_ptr<ASTNode> expr = nullptr;
+    if (current().Id != TokenId::Semicolon)
+    {
+        expr = parse_expr();
+    }
+
+    expect(TokenId::Semicolon);
+
+    auto node = std::make_unique<ASTNode>();
+    node->Type = NodeType::ReturnStmt;
+    node->Data = ReturnStmtNode{
+        .Expr = std::move(expr),
+    };
+
+    return node;
+}
+
+int Parser::get_precedence(TokenId op)
+{
+    switch (op)
+    {
+    case TokenId::Star:
+    case TokenId::Slash:
+        return 2;
+    case TokenId::Plus:
+    case TokenId::Minus:
+        return 1;
+    default:
+        return -1;
+    }
+}
+
 std::unique_ptr<ASTNode> parse(Tokenization &tokenization)
 {
     Parser parser = {
@@ -250,34 +373,121 @@ std::unique_ptr<ASTNode> parse(Tokenization &tokenization)
     return parser.parse_program();
 }
 
-void ASTNode::print()
+void ASTNode::print(int indent)
 {
-    for (auto &child : Children)
+    auto print_indent = [indent]()
     {
-        switch (child->Type)
-        {
-        case NodeType::Program:
-            printf("Program\n");
-            break;
+        for (int i = 0; i < indent; i++)
+            printf("  ");
+    };
 
-        case NodeType::FuncDecl:
-        {
-            FuncDeclNode func = std::get<FuncDeclNode>(child->Data);
-            printf("Function: %s | Type: %s\n", func.Name.c_str(), func.ReturnType->get_name().c_str());
-            child->print();
-            break;
-        }
+    // Print this node itself
+    switch (Type)
+    {
+    case NodeType::Program:
+        print_indent();
+        printf("Program\n");
+        break;
 
-        case NodeType::VarDecl:
-        {
-            VarDeclNode var = std::get<VarDeclNode>(child->Data);
-
-            printf("Variable: %s | Value: %s | Type: %s\n",
-                   var.Name.c_str(),
-                   var.Initializer.RawValue.c_str(),
-                   var.VarType->get_name().c_str());
-            break;
-        }
-        }
+    case NodeType::FuncDecl:
+    {
+        FuncDeclNode func = std::get<FuncDeclNode>(Data);
+        print_indent();
+        printf("Function: %s | Return Type: %s\n",
+               func.Name.c_str(),
+               func.ReturnType->get_name().c_str());
+        break;
     }
+
+    case NodeType::VarDecl:
+    {
+        VarDeclNode var = std::get<VarDeclNode>(Data);
+        print_indent();
+        printf("Variable: %s | Value: %s | Type: %s\n",
+               var.Name.c_str(),
+               var.Initializer.RawValue.c_str(),
+               var.VarType->get_name().c_str());
+        break;
+    }
+
+    case NodeType::ReturnStmt:
+    {
+        print_indent();
+        printf("Return\n");
+
+        auto &ret = std::get<ReturnStmtNode>(Data);
+        if (ret.Expr)
+        {
+            print_indent();
+            printf("  Expr:\n");
+            ret.Expr->print(indent + 2);
+        }
+        else
+        {
+            print_indent();
+            printf("  <no expression>\n");
+        }
+        break;
+    }
+
+    case NodeType::LiteralExpr:
+    {
+        LiteralExprNode expr = std::get<LiteralExprNode>(Data);
+        print_indent();
+        printf("LiteralExpr: Type: %s | Value: %s\n",
+               expr.get_type_name().c_str(),
+               expr.Value.c_str());
+        break;
+    }
+
+    case NodeType::IdentifierExpr:
+    {
+        IdentifierExprNode expr = std::get<IdentifierExprNode>(Data);
+        print_indent();
+        printf("IdentifierExpr: Name: %s\n", expr.Name.c_str());
+        break;
+    }
+
+    case NodeType::BinaryExpr:
+    {
+        const BinaryExprNode &expr = std::get<BinaryExprNode>(Data);
+        print_indent();
+        printf("BinaryExpr: Op: %s\n", get_token_id_name(expr.Op).c_str());
+
+        // Recursively print LHS and RHS
+        if (expr.LHS)
+        {
+            print_indent();
+            printf("  LHS:\n");
+            expr.LHS->print(indent + 2);
+        }
+        if (expr.RHS)
+        {
+            print_indent();
+            printf("  RHS:\n");
+            expr.RHS->print(indent + 2);
+        }
+        break;
+    }
+    }
+
+    for (const auto &child : Children)
+    {
+        child->print(indent + 1);
+    }
+}
+
+std::string LiteralExprNode::get_type_name()
+{
+    switch (LitType)
+    {
+    case TypeKind::Int:
+        return "Int";
+    case TypeKind::Float:
+        return "Float";
+    case TypeKind::String:
+        return "String";
+    }
+
+    return "";
 }

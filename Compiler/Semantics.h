@@ -82,6 +82,8 @@ private:
     SymbolTable m_Symbols;
     int m_ErrorCount = 0;
 
+    Type *m_CurrentFunctionReturn = nullptr;
+
     template <typename... Args>
     void error(std::format_string<Args...> fmt, Args &&...args)
     {
@@ -90,9 +92,16 @@ private:
         fprintf(stderr, "Semantic error: %s\n", msg.c_str());
     }
     void visit(ASTNode *node);
+
     void visit_program(ASTNode *node);
     void visit_func_decl(ASTNode *node, FuncDeclNode &func);
     void visit_var_decl(ASTNode *node, VarDeclNode &var);
+
+    Type *visit_expr(ASTNode *node);
+    Type *visit_literal_expr(LiteralExprNode &node);
+    Type *visit_identifier_expr(IdentifierExprNode &node);
+    Type *visit_binary_expr(BinaryExprNode &node);
+    Type *visit_return_stmt(ASTNode *node);
 
     Type *analyze_literal(Literal &literal);
 

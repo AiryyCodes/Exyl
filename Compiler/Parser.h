@@ -7,17 +7,55 @@
 #include <variant>
 #include <vector>
 
+struct ASTNode;
+
 enum class NodeType
 {
     Program,
     FuncDecl,
+    ReturnStmt,
     VarDecl,
+    LiteralExpr,
+    IdentifierExpr,
+    BinaryExpr,
 };
 
 struct TypeRef
 {
     // The parsed type name (ex. void, i32, string, etc...)
     std::string Name;
+};
+
+struct LiteralExprNode
+{
+    enum class TypeKind
+    {
+        Int,
+        Float,
+        String
+    } LitType;
+    std::string Value;
+
+    Type *ExprType = nullptr;
+
+    std::string get_type_name();
+};
+
+struct IdentifierExprNode
+{
+    std::string Name;
+
+    Type *ExprType = nullptr;
+};
+
+struct BinaryExprNode
+{
+    TokenId Op; // Plus, Minus, etc.
+
+    std::unique_ptr<ASTNode> LHS;
+    std::unique_ptr<ASTNode> RHS;
+
+    Type *ExprType = nullptr;
 };
 
 struct FuncParam
@@ -33,6 +71,11 @@ struct FuncDeclNode
 
     TypeRef ReturnTypeRef;
     Type *ReturnType = &Types::Error;
+};
+
+struct ReturnStmtNode
+{
+    std::unique_ptr<ASTNode> Expr;
 };
 
 enum class LiteralType
@@ -56,8 +99,6 @@ struct Literal
     LiteralType Type;
     LiteralValue Value;
     std::string RawValue;
-
-    struct Type *ExprType = nullptr;
 };
 
 struct VarDeclNode
@@ -69,7 +110,14 @@ struct VarDeclNode
     Type *VarType = &Types::Error;
 };
 
-using ASTData = std::variant<std::monostate, FuncDeclNode, VarDeclNode>;
+using ASTData = std::variant<
+    std::monostate,
+    FuncDeclNode,
+    ReturnStmtNode,
+    VarDeclNode,
+    LiteralExprNode,
+    IdentifierExprNode,
+    BinaryExprNode>;
 
 struct ASTNode
 {
@@ -81,7 +129,7 @@ struct ASTNode
     // Data for the node
     ASTData Data;
 
-    void print();
+    void print(int indent = 0);
 };
 
 struct Parser
@@ -102,6 +150,13 @@ struct Parser
 
     std::unique_ptr<ASTNode> parse_let_decl();
     Literal parse_literal();
+
+    std::unique_ptr<ASTNode> parse_expr();
+    std::unique_ptr<ASTNode> parse_primary();
+    std::unique_ptr<ASTNode> parse_binary_expr(int minPrec);
+    std::unique_ptr<ASTNode> parse_return_stmt();
+
+    int get_precedence(TokenId op);
 };
 
 std::unique_ptr<ASTNode> parse(Tokenization &tokenization);

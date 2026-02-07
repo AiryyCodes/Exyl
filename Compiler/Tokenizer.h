@@ -15,8 +15,15 @@ enum class TokenId
 
     Let,
     Fun,
+    Return,
 
     Equals,
+    NotEquals,
+
+    Star,
+    Slash,
+    Plus,
+    Minus,
 
     LParen,
     RParen,

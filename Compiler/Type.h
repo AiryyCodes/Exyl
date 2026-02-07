@@ -6,6 +6,7 @@
 struct Type
 {
     virtual ~Type() = default;
+
     virtual std::string get_name() const = 0;
 };
 

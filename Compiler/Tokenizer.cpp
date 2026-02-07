@@ -8,6 +8,7 @@
 static const std::unordered_map<std::string, TokenId> KEYWORDS = {
     {"let", TokenId::Let},
     {"fun", TokenId::Fun},
+    {"return", TokenId::Return},
     {"true", TokenId::True},
     {"false", TokenId::False},
 };
@@ -212,6 +213,26 @@ void tokenize(const std::string &code, Tokenization &tokenization)
         case '=':
             make_token(tokenizer, TokenId::Equals, start);
             continue;
+        case '!':
+            if (peek(tokenizer) == '=')
+            {
+                // Consume '='
+                advance(tokenizer);
+                make_token(tokenizer, TokenId::NotEquals, start);
+            }
+
+        case '*':
+            make_token(tokenizer, TokenId::Star, start);
+            continue;
+        case '/':
+            make_token(tokenizer, TokenId::Slash, start);
+            continue;
+        case '+':
+            make_token(tokenizer, TokenId::Plus, start);
+            continue;
+        case '-':
+            make_token(tokenizer, TokenId::Minus, start);
+            continue;
 
         case '(':
             make_token(tokenizer, TokenId::LParen, start);
@@ -289,9 +310,22 @@ std::string get_token_id_name(TokenId id)
         return "Let";
     case TokenId::Fun:
         return "Fun";
+    case TokenId::Return:
+        return "Return";
 
     case TokenId::Equals:
         return "Equals";
+    case TokenId::NotEquals:
+        return "NotEquals";
+
+    case TokenId::Star:
+        return "Star";
+    case TokenId::Slash:
+        return "Slash";
+    case TokenId::Plus:
+        return "Plus";
+    case TokenId::Minus:
+        return "Minus";
 
     case TokenId::LParen:
         return "LParen";
