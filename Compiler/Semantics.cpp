@@ -49,7 +49,7 @@ void SemanticAnalyzer::visit_program(ASTNode *node)
 
 void SemanticAnalyzer::visit_func_decl(ASTNode *node, FuncDeclNode &func)
 {
-    func.ReturnType = func.ReturnTypeRef.Name.empty() ? &Types::Void : resolve_type(func.ReturnTypeRef.Name);
+    func.ReturnType = func.ReturnTypeRef.Name.empty() ? &Types::Unknown : resolve_type(func.ReturnTypeRef.Name);
 
     auto sym = std::make_unique<Symbol>(Symbol{
         .Name = func.Name,
@@ -65,6 +65,8 @@ void SemanticAnalyzer::visit_func_decl(ASTNode *node, FuncDeclNode &func)
     m_Symbols.push_scope();
 
     Type *prevReturn = m_CurrentFunctionReturn;
+    Type *prevInferred = m_InferredReturnType;
+
     m_CurrentFunctionReturn = func.ReturnType;
 
     for (auto &param : func.Params)
@@ -86,7 +88,20 @@ void SemanticAnalyzer::visit_func_decl(ASTNode *node, FuncDeclNode &func)
     for (auto &child : node->Children)
         visit(child.get());
 
+    if (func.ReturnType == &Types::Unknown)
+    {
+        if (!m_InferredReturnType)
+        {
+            func.ReturnType = &Types::Void;
+        }
+        else
+        {
+            func.ReturnType = m_InferredReturnType;
+        }
+    }
+
     m_CurrentFunctionReturn = prevReturn;
+    m_InferredReturnType = nullptr;
 
     m_Symbols.pop_scope();
 }
@@ -218,18 +233,32 @@ Type *SemanticAnalyzer::visit_binary_expr(BinaryExprNode &node)
 Type *SemanticAnalyzer::visit_return_stmt(ASTNode *node)
 {
     auto &ret = std::get<ReturnStmtNode>(node->Data);
-    Type *exprType = nullptr;
-    if (ret.Expr)
-        exprType = visit_expr(ret.Expr.get());
+    Type *exprType = ret.Expr ? visit_expr(ret.Expr.get()) : &Types::Void;
 
     if (exprType == &Types::Error)
         return exprType;
 
-    if (!is_assignable(m_CurrentFunctionReturn, exprType))
+    if (m_CurrentFunctionReturn != &Types::Unknown)
     {
-        error("cannot return '{}' from a function returning '{}'",
-              exprType->get_name(),
-              m_CurrentFunctionReturn->get_name());
+        if (!is_assignable(m_CurrentFunctionReturn, exprType))
+        {
+            error("cannot return '{}' from a function returning '{}'",
+                  exprType->get_name(),
+                  m_CurrentFunctionReturn->get_name());
+        }
+        return exprType;
+    }
+
+    if (!m_InferredReturnType)
+    {
+        m_InferredReturnType = exprType;
+    }
+    else if (!is_assignable(m_InferredReturnType, exprType))
+    {
+        error("inconsistent return types: '{}' vs '{}'",
+              m_InferredReturnType->get_name(),
+              exprType->get_name());
+        m_InferredReturnType = &Types::Error;
     }
 
     return exprType;

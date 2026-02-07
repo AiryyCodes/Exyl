@@ -23,7 +23,9 @@ struct BuiltinType : Type
         Bool,
         String,
         Void,
-        Error
+
+        Unknown,
+        Error,
     };
     Kind kind;
 
@@ -49,6 +51,9 @@ struct BuiltinType : Type
             return "string";
         case Kind::Void:
             return "void";
+
+        case Kind::Unknown:
+            return "<unknown>";
         case Kind::Error:
             return "<error>";
         }
@@ -65,6 +70,7 @@ inline BuiltinType F32{BuiltinType::Kind::F32};
 inline BuiltinType Bool{BuiltinType::Kind::Bool};
 inline BuiltinType String{BuiltinType::Kind::String};
 inline BuiltinType Void{BuiltinType::Kind::Void};
+inline BuiltinType Unknown{BuiltinType::Kind::Unknown};
 inline BuiltinType Error{BuiltinType::Kind::Error};
 } // namespace Types
 

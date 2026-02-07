@@ -80,9 +80,11 @@ public:
 
 private:
     SymbolTable m_Symbols;
+
     int m_ErrorCount = 0;
 
     Type *m_CurrentFunctionReturn = nullptr;
+    Type *m_InferredReturnType = nullptr;
 
     template <typename... Args>
     void error(std::format_string<Args...> fmt, Args &&...args)
@@ -91,6 +93,7 @@ private:
         std::string msg = std::format(fmt, std::forward<Args>(args)...);
         fprintf(stderr, "Semantic error: %s\n", msg.c_str());
     }
+
     void visit(ASTNode *node);
 
     void visit_program(ASTNode *node);
