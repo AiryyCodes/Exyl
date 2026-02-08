@@ -143,12 +143,11 @@ std::unique_ptr<ASTNode> Parser::parse_func_decl()
     return node;
 }
 
-std::unique_ptr<ASTNode> Parser::parse_func_call()
+std::unique_ptr<ASTNode> Parser::parse_func_call(std::unique_ptr<ASTNode> callee)
 {
-    Token ident = expect(TokenId::Symbol);
-
-    // Consume '('
-    advance();
+    // Should be '('
+    Token token = current();
+    expect(TokenId::LParen);
 
     std::vector<std::unique_ptr<ASTNode>> args;
 
@@ -176,7 +175,7 @@ std::unique_ptr<ASTNode> Parser::parse_func_call()
     auto node = std::make_unique<ASTNode>();
     node->Type = NodeType::FuncCall;
     node->Data = FuncCallNode{
-        .Name = ident.Name,
+        .Name = std::get<IdentifierExprNode>(callee->Data).Name,
         .Args = std::move(args),
     };
 
@@ -199,20 +198,13 @@ std::vector<std::unique_ptr<ASTNode>> Parser::parse_block()
         case TokenId::Return:
             children.push_back(parse_return_stmt());
             break;
-        case TokenId::Symbol:
-        {
-            if (peek().Id == TokenId::LParen)
-            {
-                children.push_back(parse_func_call());
-                break;
-            }
-        }
-
         default:
-            printf("Unexpected token '%s'\n",
-                   get_token_id_name(current().Id).c_str());
-            advance();
-            continue;
+        {
+            children.push_back(parse_expr());
+            expect(TokenId::Semicolon);
+            break;
+        }
+        break;
         }
     }
 
@@ -242,62 +234,48 @@ std::unique_ptr<ASTNode> Parser::parse_let_decl()
     }
 
     // Consume '='
-    advance();
+    expect(TokenId::Equals);
 
-    varDecl.Initializer = parse_literal();
+    varDecl.Initializer = parse_expr();
 
-    node->Data = varDecl;
+    node->Data = std::move(varDecl);
 
     expect(TokenId::Semicolon);
 
     return node;
 }
 
-Literal Parser::parse_literal()
+std::unique_ptr<ASTNode> Parser::parse_literal(LiteralExprNode::TypeKind kind)
 {
     Token token = current();
+    advance();
 
-    switch (token.Id)
-    {
-    case TokenId::String:
-        advance();
-        return Literal{
-            .Type = LiteralType::String,
-            .Value = token.Name,
-            .RawValue = token.Name,
-        };
-    case TokenId::Int:
-        advance();
-        return Literal{
-            .Type = LiteralType::Int,
-            .Value = std::stoll(token.Name),
-            .RawValue = token.Name,
-        };
-    case TokenId::Float:
-        advance();
-        return Literal{
-            .Type = LiteralType::Float,
-            .Value = std::stod(token.Name),
-            .RawValue = token.Name,
-        };
-    case TokenId::True:
-        advance();
-        return Literal{
-            .Type = LiteralType::Bool,
-            .Value = true,
-            .RawValue = token.Name,
-        };
-    case TokenId::False:
-        advance();
-        return Literal{
-            .Type = LiteralType::Bool,
-            .Value = false,
-            .RawValue = token.Name,
-        };
+    auto node = std::make_unique<ASTNode>();
+    node->Type = NodeType::LiteralExpr;
+    node->Data = LiteralExprNode{
+        .LitType = kind,
+        .Value = token.Name,
+    };
+    return node;
+}
 
-    default:
-        throw std::runtime_error("Expected literal");
-    }
+std::unique_ptr<ASTNode> Parser::parse_identifier()
+{
+    Token token = current();
+    advance();
+
+    auto node = std::make_unique<ASTNode>();
+    node->Type = NodeType::IdentifierExpr;
+    node->Data = IdentifierExprNode{.Name = token.Name};
+    return node;
+}
+
+std::unique_ptr<ASTNode> Parser::parse_grouped_expr()
+{
+    expect(TokenId::LParen);
+    auto expr = parse_expr();
+    expect(TokenId::RParen);
+    return expr;
 }
 
 std::unique_ptr<ASTNode> Parser::parse_expr()
@@ -307,50 +285,66 @@ std::unique_ptr<ASTNode> Parser::parse_expr()
 
 std::unique_ptr<ASTNode> Parser::parse_primary()
 {
-    Token tok = current();
+    Token token = current();
 
-    if (tok.Id == TokenId::Int)
+    switch (token.Id)
     {
-        advance();
-        auto node = std::make_unique<ASTNode>();
-        node->Type = NodeType::LiteralExpr;
-        node->Data = LiteralExprNode{
-            .LitType = LiteralExprNode::TypeKind::Int,
-            .Value = tok.Name,
-        };
-        return node;
-    }
-    else if (tok.Id == TokenId::String)
+    case TokenId::Int:
+        return parse_literal(LiteralExprNode::TypeKind::Int);
+    case TokenId::Float:
+        return parse_literal(LiteralExprNode::TypeKind::Float);
+
+    case TokenId::String:
+        return parse_literal(LiteralExprNode::TypeKind::String);
+
+    case TokenId::True:
+        return parse_literal(LiteralExprNode::TypeKind::Bool);
+    case TokenId::False:
+        return parse_literal(LiteralExprNode::TypeKind::Bool);
+
+    case TokenId::Symbol:
     {
-        advance();
-        auto node = std::make_unique<ASTNode>();
-        node->Type = NodeType::LiteralExpr;
-        node->Data = LiteralExprNode{
-            .LitType = LiteralExprNode::TypeKind::String,
-            .Value = tok.Name,
-        };
-        return node;
-    }
-    else if (tok.Id == TokenId::Symbol)
-    {
-        advance();
-        auto node = std::make_unique<ASTNode>();
-        node->Type = NodeType::IdentifierExpr;
-        node->Data = IdentifierExprNode{.Name = tok.Name};
-        return node;
-    }
-    else if (tok.Id == TokenId::LParen)
-    {
-        // consume '('
-        advance();
-        auto expr = parse_expr();
-        expect(TokenId::RParen);
-        return expr;
+        auto ident = parse_identifier();
+
+        // function call
+        if (current().Id == TokenId::LParen)
+        {
+            advance(); // consume '('
+            FuncCallNode call;
+            call.Name = std::get<IdentifierExprNode>(ident->Data).Name;
+
+            if (current().Id != TokenId::RParen) // not empty
+            {
+                while (true)
+                {
+                    call.Args.push_back(parse_expr());
+
+                    if (current().Id == TokenId::RParen)
+                        break;
+
+                    expect(TokenId::Comma);
+                }
+            }
+
+            expect(TokenId::RParen);
+
+            auto node = std::make_unique<ASTNode>();
+            node->Type = NodeType::FuncCall;
+            node->Data = std::move(call);
+            return node;
+        }
+
+        return ident;
     }
 
-    throw std::runtime_error(
-        "Unexpected token in primary expression: " +
-        get_token_id_name(tok.Id));
+    case TokenId::LParen:
+        return parse_grouped_expr();
+
+    default:
+        throw std::runtime_error(
+            "Unexpected token in primary expression: " +
+            get_token_id_name(token.Id));
+    }
 }
 
 std::unique_ptr<ASTNode> Parser::parse_binary_expr(int minPrec)
@@ -443,7 +437,7 @@ void ASTNode::print(int indent)
     {
     case NodeType::Program:
         print_indent();
-        printf("Program\n");
+        printf("Program:\n");
         break;
 
     case NodeType::FuncDecl:
@@ -474,12 +468,19 @@ void ASTNode::print(int indent)
 
     case NodeType::VarDecl:
     {
-        VarDeclNode var = std::get<VarDeclNode>(Data);
+        VarDeclNode &var = std::get<VarDeclNode>(Data);
         print_indent();
-        printf("Variable: %s | Value: %s | Type: %s\n",
+        printf("Variable: %s | Type: %s\n",
                var.Name.c_str(),
-               var.Initializer.RawValue.c_str(),
                var.VarType->get_name().c_str());
+
+        if (var.Initializer)
+        {
+            print_indent();
+            printf("  Expr:\n");
+            var.Initializer->print(indent + 2);
+        }
+
         break;
     }
 
@@ -508,7 +509,7 @@ void ASTNode::print(int indent)
         LiteralExprNode expr = std::get<LiteralExprNode>(Data);
         print_indent();
         printf("LiteralExpr: Type: %s | Value: %s\n",
-               expr.get_type_name().c_str(),
+               expr.ExprType->get_name().c_str(),
                expr.Value.c_str());
         break;
     }
@@ -548,19 +549,4 @@ void ASTNode::print(int indent)
     {
         child->print(indent + 1);
     }
-}
-
-std::string LiteralExprNode::get_type_name()
-{
-    switch (LitType)
-    {
-    case TypeKind::Int:
-        return "Int";
-    case TypeKind::Float:
-        return "Float";
-    case TypeKind::String:
-        return "String";
-    }
-
-    return "";
 }

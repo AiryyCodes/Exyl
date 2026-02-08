@@ -34,13 +34,12 @@ struct LiteralExprNode
     {
         Int,
         Float,
-        String
+        String,
+        Bool,
     } LitType;
     std::string Value;
 
     Type *ExprType = nullptr;
-
-    std::string get_type_name();
 };
 
 struct IdentifierExprNode
@@ -118,7 +117,7 @@ struct Literal
 struct VarDeclNode
 {
     std::string Name;
-    Literal Initializer;
+    std::unique_ptr<ASTNode> Initializer;
 
     TypeRef VarTypeRef;
     Type *VarType = &Types::Error;
@@ -162,11 +161,13 @@ struct Parser
 
     std::unique_ptr<ASTNode> parse_program();
     std::unique_ptr<ASTNode> parse_func_decl();
-    std::unique_ptr<ASTNode> parse_func_call();
+    std::unique_ptr<ASTNode> parse_func_call(std::unique_ptr<ASTNode> callee);
     std::vector<std::unique_ptr<ASTNode>> parse_block();
 
     std::unique_ptr<ASTNode> parse_let_decl();
-    Literal parse_literal();
+    std::unique_ptr<ASTNode> parse_literal(LiteralExprNode::TypeKind kind);
+    std::unique_ptr<ASTNode> parse_identifier();
+    std::unique_ptr<ASTNode> parse_grouped_expr();
 
     std::unique_ptr<ASTNode> parse_expr();
     std::unique_ptr<ASTNode> parse_primary();

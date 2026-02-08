@@ -2,14 +2,23 @@ fun add(a: i64, b: i64): i64 {
     return a + b;
 }
 
+fun foo() {
+    return "foo";
+}
+
 fun main(): void {
     let int: i64 = 69;
     let float: f32 = 420.0;
-    let string: string = "Hello, World!";
-    let bool: bool = true;
+    let string: string = "string";
+    let my_true: bool = true;
+    let my_false: bool = false;
+
+    let test = 1 + 1;
+
+    add(add(1, 2), 1);
 
     let a = 1;
     let b = 1;
 
-    add(a, b);
+    let result = add(a, add(b, a));
 }

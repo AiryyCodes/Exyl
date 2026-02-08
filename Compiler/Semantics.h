@@ -105,13 +105,15 @@ private:
 
     void visit_program(ASTNode *node);
     void visit_func_decl(ASTNode *node, FuncDeclNode &func);
-    void visit_func_call(ASTNode *node, FuncCallNode &call);
     void visit_var_decl(ASTNode *node, VarDeclNode &var);
 
     Type *visit_expr(ASTNode *node);
     Type *visit_literal_expr(LiteralExprNode &node);
     Type *visit_identifier_expr(IdentifierExprNode &node);
     Type *visit_binary_expr(BinaryExprNode &node);
+    Type *visit_func_call_expr(ASTNode *node, FuncCallNode &call);
+
+    void visit_func_call_stmt(ASTNode *node, FuncCallNode &call);
     Type *visit_return_stmt(ASTNode *node);
 
     Type *analyze_literal(Literal &literal);

@@ -25,8 +25,8 @@ void SemanticAnalyzer::visit(ASTNode *node)
     case NodeType::FuncDecl:
         visit_func_decl(node, std::get<FuncDeclNode>(node->Data));
         break;
-    case NodeType::FuncCall:
-        visit_func_call(node, std::get<FuncCallNode>(node->Data));
+    case NodeType::FuncCall: // <-- add this
+        visit_func_call_stmt(node, std::get<FuncCallNode>(node->Data));
         break;
 
     case NodeType::VarDecl:
@@ -118,7 +118,18 @@ void SemanticAnalyzer::visit_func_decl(ASTNode *node, FuncDeclNode &func)
     m_Symbols.pop_scope();
 }
 
-void SemanticAnalyzer::visit_func_call(ASTNode *node, FuncCallNode &call)
+void SemanticAnalyzer::visit_func_call_stmt(ASTNode *node, FuncCallNode &call)
+{
+    Type *retType = visit_func_call_expr(node, call);
+
+    // warn if the function has a non-void return type
+    if (retType != &Types::Void && retType != &Types::Error)
+    {
+        printf("Warning: Ignoring return value of function '%s'\n", call.Name.c_str());
+    }
+}
+
+Type *SemanticAnalyzer::visit_func_call_expr(ASTNode *node, FuncCallNode &call)
 {
     // TODO: Check if parameters exists in symbol list
     // TODO: Check if parameter type is the correct type for that parameter
@@ -127,7 +138,7 @@ void SemanticAnalyzer::visit_func_call(ASTNode *node, FuncCallNode &call)
     if (!sym || sym->Kind != SymbolKind::Function)
     {
         error("call to undeclared function '{}'", call.Name);
-        return;
+        return &Types::Error;
     }
 
     auto &func = sym->FunctionInfo;
@@ -138,7 +149,7 @@ void SemanticAnalyzer::visit_func_call(ASTNode *node, FuncCallNode &call)
               call.Name,
               func->ParamTypes.size(),
               call.Args.size());
-        return;
+        return &Types::Error;
     }
 
     for (size_t i = 0; i < call.Args.size(); ++i)
@@ -154,11 +165,13 @@ void SemanticAnalyzer::visit_func_call(ASTNode *node, FuncCallNode &call)
                   paramType->get_name());
         }
     }
+
+    return func->ReturnType;
 }
 
 void SemanticAnalyzer::visit_var_decl(ASTNode *, VarDeclNode &var)
 {
-    Type *initType = analyze_literal(var.Initializer);
+    Type *initType = visit_expr(var.Initializer.get());
     Type *declaredType = nullptr;
     if (!var.VarTypeRef.Name.empty())
     {
@@ -216,11 +229,14 @@ Type *SemanticAnalyzer::visit_expr(ASTNode *node)
         return visit_identifier_expr(std::get<IdentifierExprNode>(node->Data));
     case NodeType::BinaryExpr:
         return visit_binary_expr(std::get<BinaryExprNode>(node->Data));
+    case NodeType::FuncCall:
+        return visit_func_call_expr(node, std::get<FuncCallNode>(node->Data));
     default:
         error("Unexpected node type in expression");
         return &Types::Error;
     }
 }
+
 Type *SemanticAnalyzer::visit_literal_expr(LiteralExprNode &node)
 {
     switch (node.LitType)
@@ -233,6 +249,9 @@ Type *SemanticAnalyzer::visit_literal_expr(LiteralExprNode &node)
         break;
     case LiteralExprNode::TypeKind::String:
         node.ExprType = &Types::String;
+        break;
+    case LiteralExprNode::TypeKind::Bool:
+        node.ExprType = &Types::Bool;
         break;
     default:
         node.ExprType = &Types::Error;
