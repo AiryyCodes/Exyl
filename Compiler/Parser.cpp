@@ -70,6 +70,11 @@ std::unique_ptr<ASTNode> Parser::parse_program()
             node = parse_func_decl();
             break;
 
+        case TokenId::Extern:
+            if (peek().Id == TokenId::Fun)
+                node = parse_func_decl();
+            break;
+
         default:
             printf("Unexpected token '%s'\n",
                    get_token_id_name(current().Id).c_str());
@@ -86,6 +91,13 @@ std::unique_ptr<ASTNode> Parser::parse_program()
 
 std::unique_ptr<ASTNode> Parser::parse_func_decl()
 {
+    bool isExtern = false;
+    if (current().Id == TokenId::Extern)
+    {
+        expect(TokenId::Extern);
+        isExtern = true;
+    }
+
     expect(TokenId::Fun);
 
     Token symbol = expect(TokenId::Symbol);
@@ -124,7 +136,7 @@ std::unique_ptr<ASTNode> Parser::parse_func_decl()
     expect(TokenId::RParen);
 
     TypeRef typeRef;
-    if (current().Id == TokenId::Colon)
+    if (current().Id == TokenId::Colon || isExtern)
     {
         expect(TokenId::Colon);
 
@@ -135,10 +147,14 @@ std::unique_ptr<ASTNode> Parser::parse_func_decl()
     node->Data = FuncDeclNode{
         .Name = symbol.Name,
         .Params = std::move(params),
+        .IsExtern = isExtern,
         .ReturnTypeRef = typeRef,
     };
 
-    node->Children = parse_block();
+    if (!isExtern)
+        node->Children = parse_block();
+    else
+        expect(TokenId::Semicolon);
 
     return node;
 }

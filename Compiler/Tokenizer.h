@@ -16,6 +16,7 @@ enum class TokenId
     Let,
     Fun,
     Return,
+    Extern,
 
     Equals,
     NotEquals,

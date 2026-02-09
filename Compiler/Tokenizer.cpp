@@ -9,6 +9,7 @@ static const std::unordered_map<std::string, TokenId> KEYWORDS = {
     {"let", TokenId::Let},
     {"fun", TokenId::Fun},
     {"return", TokenId::Return},
+    {"extern", TokenId::Extern},
     {"true", TokenId::True},
     {"false", TokenId::False},
 };
@@ -312,6 +313,8 @@ std::string get_token_id_name(TokenId id)
         return "Fun";
     case TokenId::Return:
         return "Return";
+    case TokenId::Extern:
+        return "Extern";
 
     case TokenId::Equals:
         return "Equals";

@@ -70,14 +70,27 @@ void CodeGen::declare_function(FuncDeclNode &func)
 void CodeGen::emit_func(ASTNode *node, FuncDeclNode &func)
 {
     llvm::Function *fn = m_Module.getFunction(func.Name);
-    assert(fn && "function not declared");
 
-    if (!fn->empty())
+    if (!fn)
+    {
+        // Create function type
+        std::vector<llvm::Type *> argTypes;
+        for (auto &param : func.Params)
+            argTypes.push_back(to_llvm_type(param.ResolvedType));
+
+        llvm::FunctionType *fnType =
+            llvm::FunctionType::get(to_llvm_type(func.ReturnType), argTypes, false);
+
+        fn = llvm::Function::Create(fnType,
+                                    llvm::Function::ExternalLinkage,
+                                    func.Name,
+                                    m_Module);
+    }
+
+    if (func.IsExtern)
         return;
 
-    llvm::BasicBlock *entry =
-        llvm::BasicBlock::Create(m_Context, "entry", fn);
-
+    llvm::BasicBlock *entry = llvm::BasicBlock::Create(m_Context, "entry", fn);
     m_Builder.SetInsertPoint(entry);
     m_ValueMap.clear();
 

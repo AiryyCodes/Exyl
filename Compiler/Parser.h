@@ -85,6 +85,8 @@ struct FuncDeclNode
     std::string Name;
     std::vector<FuncParam> Params;
 
+    bool IsExtern;
+
     TypeRef ReturnTypeRef;
     Type *ReturnType = &Types::Error;
 };

@@ -76,6 +76,11 @@ void SemanticAnalyzer::visit_func_decl(ASTNode *node, FuncDeclNode &func)
         error("redeclared function '{}'", func.Name.c_str());
     }
 
+    if (func.IsExtern)
+    {
+        return;
+    }
+
     m_Symbols.push_scope();
 
     Type *prevReturn = m_CurrentFunctionReturn;

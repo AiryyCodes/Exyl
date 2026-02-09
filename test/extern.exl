@@ -1,0 +1,7 @@
+extern fun print(msg: string): void;
+extern fun println(msg: string): void;
+
+fun main(): void {
+    print("Hello, print!\n");
+    println("Hello, println!");
+}
