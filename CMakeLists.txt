@@ -10,3 +10,9 @@ file(GLOB_RECURSE COMPILER_SOURCES
 )
 
 add_executable(exylc ${COMPILER_SOURCES})
+
+find_package(LLVM REQUIRED)
+
+target_link_libraries(exylc PRIVATE
+    LLVM
+)

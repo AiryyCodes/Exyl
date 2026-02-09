@@ -57,12 +57,27 @@ struct BinaryExprNode
     std::unique_ptr<ASTNode> RHS;
 
     Type *ExprType = nullptr;
+
+    enum class OpKind
+    {
+        IntAdd,
+        IntSub,
+        IntMul,
+        IntDiv,
+
+        FloatAdd,
+        FloatSub,
+        FloatMul,
+        FloatDiv,
+    } ResolvedOp;
 };
 
 struct FuncParam
 {
     std::string Name;
     TypeRef Type;
+
+    struct Type *ResolvedType = nullptr;
 };
 
 struct FuncDeclNode
@@ -72,11 +87,6 @@ struct FuncDeclNode
 
     TypeRef ReturnTypeRef;
     Type *ReturnType = &Types::Error;
-};
-
-struct FuncCallParam
-{
-    std::string Name;
 };
 
 struct FuncCallNode

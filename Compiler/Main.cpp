@@ -1,3 +1,4 @@
+#include "CodeGen.h"
 #include "Parser.h"
 #include "Semantics.h"
 #include "Tokenizer.h"
@@ -48,6 +49,10 @@ int main(int argc, char *argv[])
     }
 
     root->print();
+
+    CodeGen codegen;
+    codegen.emit_program(root.get());
+    codegen.print();
 
     return EXIT_SUCCESS;
 }

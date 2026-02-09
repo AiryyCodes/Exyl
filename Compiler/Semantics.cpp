@@ -57,9 +57,11 @@ void SemanticAnalyzer::visit_func_decl(ASTNode *node, FuncDeclNode &func)
     auto funcType = std::make_unique<FunctionType>();
     funcType->ReturnType = func.ReturnType;
 
-    for (const auto &param : func.Params)
+    for (auto &param : func.Params)
     {
-        funcType->ParamTypes.push_back(resolve_type(param.Type.Name));
+        auto paramType = resolve_type(param.Type.Name);
+        param.ResolvedType = paramType;
+        funcType->ParamTypes.push_back(paramType);
     }
 
     auto sym = std::make_unique<Symbol>(Symbol{
@@ -131,9 +133,6 @@ void SemanticAnalyzer::visit_func_call_stmt(ASTNode *node, FuncCallNode &call)
 
 Type *SemanticAnalyzer::visit_func_call_expr(ASTNode *node, FuncCallNode &call)
 {
-    // TODO: Check if parameters exists in symbol list
-    // TODO: Check if parameter type is the correct type for that parameter
-
     Symbol *sym = m_Symbols.lookup(call.Name);
     if (!sym || sym->Kind != SymbolKind::Function)
     {
@@ -285,12 +284,87 @@ Type *SemanticAnalyzer::visit_binary_expr(BinaryExprNode &node)
         return node.ExprType;
     }
 
-    if (lhs != rhs)
+    auto *lhsBT = dynamic_cast<BuiltinType *>(lhs);
+    auto *rhsBT = dynamic_cast<BuiltinType *>(rhs);
+
+    if (!lhsBT || !rhsBT)
+    {
+        error("Operator '{}' not supported for this types",
+              get_token_id_name(node.Op));
+        node.ExprType = &Types::Error;
+        return node.ExprType;
+    }
+
+    if (!lhs->is_numeric())
+    {
+        error("Operator '{}' not supported for type '{}'",
+              get_token_id_name(node.Op),
+              lhs->get_name());
+        node.ExprType = &Types::Error;
+        return node.ExprType;
+    }
+
+    if (lhsBT->kind != rhsBT->kind)
     {
         error("Operator '{}' requires matching operand types, got '{}' and '{}'",
               get_token_id_name(node.Op),
               lhs->get_name(),
               rhs->get_name());
+        node.ExprType = &Types::Error;
+        return node.ExprType;
+    }
+
+    using K = BuiltinType::Kind;
+
+    switch (lhsBT->kind)
+    {
+    case K::I32:
+    case K::I64:
+        switch (node.Op)
+        {
+        case TokenId::Plus:
+            node.ResolvedOp = BinaryExprNode::OpKind::IntAdd;
+            break;
+        case TokenId::Minus:
+            node.ResolvedOp = BinaryExprNode::OpKind::IntSub;
+            break;
+        case TokenId::Star:
+            node.ResolvedOp = BinaryExprNode::OpKind::IntMul;
+            break;
+        case TokenId::Slash:
+            node.ResolvedOp = BinaryExprNode::OpKind::IntDiv;
+            break;
+        default:
+            goto invalid;
+        }
+        break;
+
+    case K::F32:
+    case K::F64:
+        switch (node.Op)
+        {
+        case TokenId::Plus:
+            node.ResolvedOp = BinaryExprNode::OpKind::FloatAdd;
+            break;
+        case TokenId::Minus:
+            node.ResolvedOp = BinaryExprNode::OpKind::FloatSub;
+            break;
+        case TokenId::Star:
+            node.ResolvedOp = BinaryExprNode::OpKind::FloatMul;
+            break;
+        case TokenId::Slash:
+            node.ResolvedOp = BinaryExprNode::OpKind::FloatDiv;
+            break;
+        default:
+            goto invalid;
+        }
+        break;
+
+    default:
+    invalid:
+        error("Operator '{}' not supported for type '{}'",
+              get_token_id_name(node.Op),
+              lhs->get_name());
         node.ExprType = &Types::Error;
         return node.ExprType;
     }

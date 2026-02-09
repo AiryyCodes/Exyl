@@ -7,6 +7,7 @@ struct Type
 {
     virtual ~Type() = default;
 
+    virtual bool is_numeric() const = 0;
     virtual std::string get_name() const = 0;
 };
 
@@ -30,6 +31,23 @@ struct BuiltinType : Type
     Kind kind;
 
     explicit BuiltinType(Kind k) : kind(k) {}
+
+    bool is_numeric() const override
+    {
+        switch (kind)
+        {
+        case Kind::I32:
+        case Kind::I64:
+        case Kind::F32:
+        case Kind::F64:
+            return true;
+
+        default:
+            return false;
+        }
+
+        return false;
+    }
 
     std::string get_name() const override
     {
