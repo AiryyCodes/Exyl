@@ -279,14 +279,16 @@ void tokenize(const std::string &code, Tokenization &tokenization)
 
     add_eof(tokenizer);
 
+    /*
     for (const auto &token : tokenizer.Tokens)
     {
         printf("%s: %s\n", get_token_id_name(token.Id).c_str(), token.Name.c_str());
     }
 
-    tokenization.Tokens = tokenizer.Tokens;
-
     printf("\n");
+    */
+
+    tokenization.Tokens = tokenizer.Tokens;
 }
 
 std::string get_token_id_name(TokenId id)

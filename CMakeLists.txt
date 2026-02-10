@@ -11,6 +11,14 @@ file(GLOB_RECURSE COMPILER_SOURCES
 
 add_executable(exylc ${COMPILER_SOURCES})
 
+add_custom_command(
+    TARGET exylc POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/Library
+    $<TARGET_FILE_DIR:exylc>/Library
+)
+
+
 find_package(LLVM REQUIRED)
 
 target_link_libraries(exylc PRIVATE

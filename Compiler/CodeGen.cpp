@@ -9,6 +9,9 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Value.h>
+#include <llvm/Bitcode/BitcodeWriter.h>
+#include <llvm/Support/raw_ostream.h>
+#include <string>
 
 void CodeGen::emit_program(ASTNode *root)
 {

@@ -27,6 +27,8 @@ public:
 
     void print();
 
+    llvm::Module &get_module() { return m_Module; }
+
 private:
     llvm::Value *emit_identifier(IdentifierExprNode &id);
 
