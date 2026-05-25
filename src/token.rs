@@ -6,6 +6,7 @@ pub enum TokenKind {
 
     // Literals
     Number,
+    String,
 
     // Keywords
     Let,

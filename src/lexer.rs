@@ -27,6 +27,10 @@ impl Lexer {
                 '=' => self.add_token(&mut tokens, TokenKind::Equals),
                 ';' => self.add_token(&mut tokens, TokenKind::Semicolon),
 
+                '"' => {
+                    self.analyze_string(&mut tokens);
+                }
+
                 c if self.is_alpha(c) => {
                     self.analyze_identifier(&mut tokens);
                 }
@@ -69,6 +73,27 @@ impl Lexer {
 
         tokens.push(Token {
             kind: TokenKind::Number,
+            lexeme: text,
+        });
+    }
+
+    fn analyze_string(&mut self, tokens: &mut Vec<Token>) {
+        while !self.is_at_end() && self.peek() != '"' {
+            self.advance();
+        }
+
+        if self.is_at_end() {
+            panic!("Unterminated string");
+        }
+
+        self.advance();
+
+        let text: String = self.source[self.start + 1..self.current - 1]
+            .iter()
+            .collect();
+
+        tokens.push(Token {
+            kind: TokenKind::String,
             lexeme: text,
         });
     }
