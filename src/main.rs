@@ -3,7 +3,10 @@ use std::fs;
 use crate::lexer::Lexer;
 use clap::Parser;
 
+pub mod ast;
+pub mod error;
 pub mod lexer;
+pub mod parser;
 pub mod token;
 
 #[derive(Parser, Debug)]
@@ -20,5 +23,10 @@ fn main() {
     let mut lexer = Lexer::new(source);
     let tokens = lexer.analyze();
 
-    println!("Tokens: {:?}", tokens);
+    println!("Tokens: {:?}", &tokens);
+
+    let mut parser = parser::Parser::new(tokens);
+    let ast = parser.parse();
+
+    println!("AST: {:?}", &ast);
 }

@@ -24,7 +24,70 @@ impl Lexer {
             let c = self.advance();
 
             match c {
-                '=' => self.add_token(&mut tokens, TokenKind::Equals),
+                '=' => {
+                    if self.peek() == '=' {
+                        // Consume '='
+                        self.advance();
+                        self.add_token(&mut tokens, TokenKind::EqualEqual);
+                    } else {
+                        self.add_token(&mut tokens, TokenKind::Equal);
+                    }
+                }
+                '!' => {
+                    if self.peek() == '=' {
+                        // Consume '='
+                        self.advance();
+                        self.add_token(&mut tokens, TokenKind::BangEqual);
+                    } else {
+                        self.add_token(&mut tokens, TokenKind::Bang);
+                    }
+                }
+                '>' => {
+                    if self.peek() == '=' {
+                        // Consume '='
+                        self.advance();
+                        self.add_token(&mut tokens, TokenKind::GreaterEqual);
+                    } else {
+                        self.add_token(&mut tokens, TokenKind::Greater);
+                    }
+                }
+                '<' => {
+                    if self.peek() == '=' {
+                        // Consume '='
+                        self.advance();
+                        self.add_token(&mut tokens, TokenKind::LessEqual);
+                    } else {
+                        self.add_token(&mut tokens, TokenKind::Less);
+                    }
+                }
+                '+' => {
+                    if self.peek() == '=' {
+                        // Consume '='
+                        self.advance();
+                        self.add_token(&mut tokens, TokenKind::PlusEqual);
+                    } else {
+                        self.add_token(&mut tokens, TokenKind::Plus);
+                    }
+                }
+                '-' => {
+                    if self.peek() == '=' {
+                        // Consume '='
+                        self.advance();
+                        self.add_token(&mut tokens, TokenKind::MinusEqual);
+                    } else {
+                        self.add_token(&mut tokens, TokenKind::Minus);
+                    }
+                }
+                '*' => {
+                    if self.peek() == '=' {
+                        // Consume '='
+                        self.advance();
+                        self.add_token(&mut tokens, TokenKind::StarEqual);
+                    } else {
+                        self.add_token(&mut tokens, TokenKind::Star);
+                    }
+                }
+
                 ';' => self.add_token(&mut tokens, TokenKind::Semicolon),
 
                 '"' => {
@@ -45,6 +108,11 @@ impl Lexer {
                 _ => panic!("Uexpected character: '{c}'"),
             }
         }
+
+        tokens.push(Token {
+            kind: TokenKind::EndOfFile,
+            lexeme: "EOF".to_string(),
+        });
 
         tokens
     }

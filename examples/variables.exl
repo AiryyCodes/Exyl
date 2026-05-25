@@ -1,1 +1,14 @@
-let test = "s";
+let test = 1 = 1;
+let test = 1 == 1;
+let test = 1 ! 1;
+let test = 1 != 1;
+let test = 1 * 1;
+let test = 1 *= 1;
+let test = 1 + 1;
+let test = 1 += 1;
+let test = 1 - 1;
+let test = 1 -= 1;
+let test = 1 < 1;
+let test = 1 <= 1;
+let test = 1 > 1;
+let test = 1 >= 1;
