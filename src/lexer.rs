@@ -88,6 +88,11 @@ impl Lexer {
                     }
                 }
 
+                '(' => self.add_token(&mut tokens, TokenKind::LeftParen),
+                ')' => self.add_token(&mut tokens, TokenKind::RightParen),
+                '{' => self.add_token(&mut tokens, TokenKind::LeftBracket),
+                '}' => self.add_token(&mut tokens, TokenKind::RightBracket),
+
                 ';' => self.add_token(&mut tokens, TokenKind::Semicolon),
 
                 '"' => {
@@ -126,6 +131,7 @@ impl Lexer {
 
         let kind = match text.as_str() {
             "let" => TokenKind::Let,
+            "fun" => TokenKind::Fun,
             _ => TokenKind::Identifier,
         };
 

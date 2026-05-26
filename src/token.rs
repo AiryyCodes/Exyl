@@ -19,6 +19,8 @@ pub enum TokenKind {
     BangEqual,
     LeftParen,
     RightParen,
+    LeftBracket,
+    RightBracket,
     Semicolon,
 
     // Literals
@@ -27,6 +29,7 @@ pub enum TokenKind {
 
     // Keywords
     Let,
+    Fun,
 
     // Other
     Identifier,

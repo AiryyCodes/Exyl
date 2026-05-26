@@ -1,0 +1,7 @@
+fun test() {
+    
+}
+
+fun main() {
+    let hello = 69;
+}

@@ -2,23 +2,21 @@ use crate::token::Token;
 
 #[derive(Debug)]
 pub struct Program {
-    pub nodes: Vec<Node>,
+    pub nodes: Vec<Stmt>,
 }
 
 impl Program {
-    pub fn new(nodes: Vec<Node>) -> Self {
+    pub fn new(nodes: Vec<Stmt>) -> Self {
         Self { nodes }
     }
 }
 
 #[derive(Debug)]
-pub enum Node {
-    Statement(Stmt),
-}
-
-#[derive(Debug)]
 pub enum Stmt {
     Let { name: String, value: Expr },
+    Fun { name: String, body: Box<Stmt> },
+
+    Block(Vec<Stmt>),
 
     Expr(Expr),
 }

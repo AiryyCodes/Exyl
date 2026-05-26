@@ -1,9 +1,5 @@
 use crate::{
-    ast::{
-        Expr,
-        Node::{self},
-        Program, Stmt,
-    },
+    ast::{Expr, Program, Stmt},
     error::ParseError,
     token::{Token, TokenKind},
 };
@@ -112,30 +108,36 @@ impl Parser {
         }
     }
 
-    fn declaration(&mut self) -> Result<Node, ParseError> {
+    fn declaration(&mut self) -> Result<Stmt, ParseError> {
         if self.match_token(TokenKind::Let) {
             return self.let_decl();
+        } else if self.match_token(TokenKind::Fun) {
+            return self.fun_decl();
         }
 
         self.statement()
     }
 
-    fn statement(&mut self) -> Result<Node, ParseError> {
-        self.expression_stmt()
+    fn statement(&mut self) -> Result<Stmt, ParseError> {
+        if self.match_token(TokenKind::LeftBracket) {
+            self.block()
+        } else {
+            self.expression_stmt()
+        }
     }
 
     fn expression(&mut self) -> Result<Expr, ParseError> {
         self.assignment()
     }
 
-    fn expression_stmt(&mut self) -> Result<Node, ParseError> {
+    fn expression_stmt(&mut self) -> Result<Stmt, ParseError> {
         let expr = self.expression()?;
         self.consume(TokenKind::Semicolon, "Expected ';' after expression")?;
 
-        Ok(Node::Statement(Stmt::Expr(expr)))
+        Ok(Stmt::Expr(expr))
     }
 
-    fn let_decl(&mut self) -> Result<Node, ParseError> {
+    fn let_decl(&mut self) -> Result<Stmt, ParseError> {
         let name = self.consume(TokenKind::Identifier, "Expected variable name")?;
 
         self.consume(TokenKind::Equal, "Expected '='")?;
@@ -149,10 +151,37 @@ impl Parser {
 
         self.advance();
 
-        Ok(Node::Statement(Stmt::Let {
+        Ok(Stmt::Let {
             name: name.lexeme,
             value,
-        }))
+        })
+    }
+
+    fn fun_decl(&mut self) -> Result<Stmt, ParseError> {
+        let name = self.consume(TokenKind::Identifier, "Expected function name")?;
+
+        self.consume(TokenKind::LeftParen, "Expected '('")?;
+        self.consume(TokenKind::RightParen, "Expected ')'")?;
+
+        self.consume(TokenKind::LeftBracket, "Expected '{'")?;
+
+        let body = self.block()?;
+
+        Ok(Stmt::Fun {
+            name: name.lexeme,
+            body: Box::new(body),
+        })
+    }
+
+    fn block(&mut self) -> Result<Stmt, ParseError> {
+        let mut body = vec![];
+        while !self.is_at_end() && !self.check(TokenKind::RightBracket) {
+            body.push(self.declaration()?);
+        }
+
+        self.consume(TokenKind::RightBracket, "Expected '}'")?;
+
+        Ok(Stmt::Block(body))
     }
 
     fn assignment(&mut self) -> Result<Expr, ParseError> {
