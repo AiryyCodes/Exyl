@@ -1,7 +1,9 @@
 fun test() {
-    
+
 }
 
 fun main() {
+    test("Hello, World!", why);
+
     let hello = 69;
 }

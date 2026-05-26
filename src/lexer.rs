@@ -94,6 +94,7 @@ impl Lexer {
                 '}' => self.add_token(&mut tokens, TokenKind::RightBracket),
 
                 ';' => self.add_token(&mut tokens, TokenKind::Semicolon),
+                ',' => self.add_token(&mut tokens, TokenKind::Comma),
 
                 '"' => {
                     self.analyze_string(&mut tokens);

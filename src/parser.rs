@@ -46,6 +46,9 @@ impl Parser {
     }
 
     fn advance(&mut self) -> Token {
+        if self.current >= self.tokens.len() {
+            return self.tokens[self.tokens.len() - 1].clone();
+        }
         let token = self.tokens[self.current].clone();
         self.current += 1;
         token
@@ -119,11 +122,10 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseError> {
-        if self.match_token(TokenKind::LeftBracket) {
-            self.block()
-        } else {
-            self.expression_stmt()
+        if self.check(TokenKind::LeftBracket) {
+            return self.block();
         }
+        self.expression_stmt()
     }
 
     fn expression(&mut self) -> Result<Expr, ParseError> {
@@ -163,8 +165,6 @@ impl Parser {
         self.consume(TokenKind::LeftParen, "Expected '('")?;
         self.consume(TokenKind::RightParen, "Expected ')'")?;
 
-        self.consume(TokenKind::LeftBracket, "Expected '{'")?;
-
         let body = self.block()?;
 
         Ok(Stmt::Fun {
@@ -174,6 +174,8 @@ impl Parser {
     }
 
     fn block(&mut self) -> Result<Stmt, ParseError> {
+        self.consume(TokenKind::LeftBracket, "Expected '{'")?;
+
         let mut body = vec![];
         while !self.is_at_end() && !self.check(TokenKind::RightBracket) {
             body.push(self.declaration()?);
@@ -184,6 +186,33 @@ impl Parser {
         Ok(Stmt::Block(body))
     }
 
+    fn call(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.primary()?;
+
+        while self.match_token(TokenKind::LeftParen) {
+            let mut arguments = vec![];
+
+            if !self.check(TokenKind::RightParen) {
+                loop {
+                    arguments.push(self.expression()?);
+
+                    if !self.match_token(TokenKind::Comma) {
+                        break;
+                    }
+                }
+            }
+
+            self.consume(TokenKind::RightParen, "Expected ')' after arguments")?;
+
+            expr = Expr::Call {
+                callee: Box::new(expr),
+                arguments,
+            }
+        }
+
+        Ok(expr)
+    }
+
     fn assignment(&mut self) -> Result<Expr, ParseError> {
         let expr = self.equality()?;
 
@@ -192,9 +221,9 @@ impl Parser {
             let value = self.assignment()?;
 
             match expr {
-                Expr::Variable(name) => {
+                Expr::Identifier(name) => {
                     return Ok(Expr::Binary {
-                        left: Box::new(Expr::Variable(name)),
+                        left: Box::new(Expr::Identifier(name)),
                         operator: equals,
                         right: Box::new(value),
                     });
@@ -291,7 +320,7 @@ impl Parser {
             });
         }
 
-        self.primary()
+        self.call()
     }
 
     fn primary(&mut self) -> Result<Expr, ParseError> {
@@ -300,7 +329,7 @@ impl Parser {
         match token.kind {
             TokenKind::Number => Ok(Expr::Number(token.lexeme.parse().unwrap())),
             TokenKind::String => Ok(Expr::String(token.lexeme)),
-            TokenKind::Identifier => Ok(Expr::Variable(token.lexeme)),
+            TokenKind::Identifier => Ok(Expr::Identifier(token.lexeme)),
 
             TokenKind::LeftParen => {
                 let expr = self.expression()?;

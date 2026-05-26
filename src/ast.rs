@@ -26,7 +26,11 @@ pub enum Expr {
     Number(f64),
     String(String),
 
-    Variable(String),
+    Identifier(String),
+    Call {
+        callee: Box<Expr>,
+        arguments: Vec<Expr>,
+    },
 
     Error(String),
 
