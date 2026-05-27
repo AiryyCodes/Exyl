@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expr, Program, Stmt},
+    ast::{Expr, Program, Stmt, TypeExpr},
     error::ParseError,
     token::{Token, TokenKind},
 };
@@ -142,6 +142,11 @@ impl Parser {
     fn let_decl(&mut self) -> Result<Stmt, ParseError> {
         let name = self.consume(TokenKind::Identifier, "Expected variable name")?;
 
+        let mut ty = None;
+        if self.match_token(TokenKind::Colon) {
+            ty = Some(self.type_expression()?);
+        }
+
         self.consume(TokenKind::Equal, "Expected '='")?;
 
         let value = self.expression()?;
@@ -155,6 +160,7 @@ impl Parser {
 
         Ok(Stmt::Let {
             name: name.lexeme,
+            ty,
             value,
         })
     }
@@ -163,13 +169,39 @@ impl Parser {
         let name = self.consume(TokenKind::Identifier, "Expected function name")?;
 
         self.consume(TokenKind::LeftParen, "Expected '('")?;
+
+        let mut params = vec![];
+
+        if !self.check(TokenKind::RightParen) {
+            loop {
+                let param_name = self.consume(TokenKind::Identifier, "Expected parameter name")?;
+
+                self.consume(TokenKind::Colon, "Expected ':' after parameter name")?;
+
+                let param_type = self.type_expression()?;
+
+                params.push((param_name.lexeme, param_type));
+
+                if !self.match_token(TokenKind::Comma) {
+                    break;
+                }
+            }
+        }
+
         self.consume(TokenKind::RightParen, "Expected ')'")?;
+
+        let mut return_type = None;
+        if self.match_token(TokenKind::Colon) {
+            return_type = Some(self.type_expression()?);
+        }
 
         let body = self.block()?;
 
         Ok(Stmt::Fun {
             name: name.lexeme,
             body: Box::new(body),
+            parameters: params,
+            return_type,
         })
     }
 
@@ -184,6 +216,15 @@ impl Parser {
         self.consume(TokenKind::RightBracket, "Expected '}'")?;
 
         Ok(Stmt::Block(body))
+    }
+
+    fn type_expression(&mut self) -> Result<TypeExpr, ParseError> {
+        let token = self.consume(TokenKind::Identifier, "Expected type name")?;
+        let current_type = TypeExpr::Primitive(token.lexeme);
+
+        // TODO: add support for union types, and more.
+
+        Ok(current_type)
     }
 
     fn call(&mut self) -> Result<Expr, ParseError> {

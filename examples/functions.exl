@@ -1,9 +1,9 @@
-fun test() {
+fun add(a: i32, b: i32): i32 {
 
 }
 
 fun main() {
-    test("Hello, World!", why);
+    add(1, 1);
 
-    let hello = 69;
+    let hello: i32 = 69;
 }

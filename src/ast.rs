@@ -13,8 +13,17 @@ impl Program {
 
 #[derive(Debug)]
 pub enum Stmt {
-    Let { name: String, value: Expr },
-    Fun { name: String, body: Box<Stmt> },
+    Let {
+        name: String,
+        ty: Option<TypeExpr>,
+        value: Expr,
+    },
+    Fun {
+        name: String,
+        parameters: Vec<(String, TypeExpr)>,
+        return_type: Option<TypeExpr>,
+        body: Box<Stmt>,
+    },
 
     Block(Vec<Stmt>),
 
@@ -43,4 +52,9 @@ pub enum Expr {
         operator: Token,
         right: Box<Expr>,
     },
+}
+
+#[derive(Debug)]
+pub enum TypeExpr {
+    Primitive(String),
 }
