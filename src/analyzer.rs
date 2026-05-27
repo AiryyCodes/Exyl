@@ -216,48 +216,12 @@ impl SemanticAnalyzer {
                 let lhs = self.expression(left, expected)?;
                 let rhs = self.expression(right, expected)?;
 
-                match operator.kind {
-                    TokenKind::Plus | TokenKind::Minus | TokenKind::Star | TokenKind::Slash => {
-                        if lhs == rhs && lhs.is_numeric() {
-                            return Ok(lhs);
-                        }
-
-                        if lhs == Type::String
-                            && rhs == Type::String
-                            && operator.kind == TokenKind::Plus
-                        {
-                            return Ok(Type::String);
-                        }
-
-                        Err(format!(
-                            "Error: Cannot apply operator '{}' to types {:?} and {:?}.",
-                            operator.lexeme, lhs, rhs
-                        ))
-                    }
-                    TokenKind::Less
-                    | TokenKind::LessEqual
-                    | TokenKind::Greater
-                    | TokenKind::GreaterEqual => {
-                        if lhs == rhs && lhs.is_numeric() {
-                            return Ok(Type::Bool);
-                        }
-
-                        Err(format!(
-                            "Type Error: Cannot compare types {:?} and {:?}.",
-                            lhs, rhs
-                        ))
-                    }
-                    TokenKind::EqualEqual | TokenKind::BangEqual => {
-                        if lhs == rhs {
-                            return Ok(Type::Bool);
-                        }
-
-                        Err(format!(
-                            "Type Error: Cannot check equality between mismatched types {:?} and {:?}.",
-                            lhs, rhs
-                        ))
-                    }
-                    _ => todo!("Implement other binary operators"),
+                match self.resolve_binary(&operator.kind, &lhs, &rhs) {
+                    Some(return_type) => Ok(return_type),
+                    None => Err(format!(
+                        "Type Error: Operator '{}' is not defined for types {:?} and {:?}.",
+                        operator.lexeme, lhs, rhs
+                    )),
                 }
             }
 
@@ -335,6 +299,40 @@ impl SemanticAnalyzer {
             }
 
             Expr::Error(msg) => Err(format!("Parser error: {}", msg)),
+        }
+    }
+
+    fn resolve_binary(&self, operator: &TokenKind, lhs: &Type, rhs: &Type) -> Option<Type> {
+        match operator {
+            TokenKind::Plus | TokenKind::Minus | TokenKind::Star | TokenKind::Slash => {
+                if lhs == rhs && lhs.is_numeric() {
+                    return Some(lhs.clone());
+                }
+
+                if lhs == &Type::String && rhs == &Type::String && operator == &TokenKind::Plus {
+                    return Some(Type::String);
+                }
+
+                None
+            }
+            TokenKind::Less
+            | TokenKind::LessEqual
+            | TokenKind::Greater
+            | TokenKind::GreaterEqual => {
+                if lhs == rhs && lhs.is_numeric() {
+                    return Some(Type::Bool);
+                }
+
+                None
+            }
+            TokenKind::EqualEqual | TokenKind::BangEqual => {
+                if lhs == rhs {
+                    return Some(Type::Bool);
+                }
+
+                None
+            }
+            _ => todo!("Implement other binary operators"),
         }
     }
 
