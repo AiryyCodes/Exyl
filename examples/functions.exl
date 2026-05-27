@@ -1,9 +1,17 @@
 fun add(a: i32, b: i32): i32 {
-
+    return a + b;
 }
 
-fun main() {
+fun takes_int(n: i32): i32 {
+    return n;
+}
+
+fun wrong_arg_type() {
+    let r: i32 = takes_int("not an int");
+}
+
+fun main(): string {
     add(1, 1);
 
-    let hello: i32 = 69;
+    let hello = "Hello";
 }

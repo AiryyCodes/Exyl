@@ -1,13 +1,16 @@
 use std::fs;
 
-use crate::lexer::Lexer;
+use crate::{analyzer::SemanticAnalyzer, lexer::Lexer};
 use clap::Parser;
 
+pub mod analyzer;
 pub mod ast;
+pub mod environment;
 pub mod error;
 pub mod lexer;
 pub mod parser;
 pub mod token;
+pub mod types;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -29,4 +32,13 @@ fn main() {
     let ast = parser.parse();
 
     println!("AST: {:?}", &ast);
+
+    let mut semantic_analyzer = SemanticAnalyzer::new();
+    match semantic_analyzer.analyze(&ast.0) {
+        Ok(_) => {}
+        Err(msg) => {
+            println!("{msg}");
+            return;
+        }
+    }
 }

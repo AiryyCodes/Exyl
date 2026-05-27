@@ -134,6 +134,7 @@ impl Lexer {
         let kind = match text.as_str() {
             "let" => TokenKind::Let,
             "fun" => TokenKind::Fun,
+            "return" => TokenKind::Return,
             _ => TokenKind::Identifier,
         };
 

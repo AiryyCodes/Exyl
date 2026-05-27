@@ -11,7 +11,7 @@ impl Program {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Let {
         name: String,
@@ -24,13 +24,16 @@ pub enum Stmt {
         return_type: Option<TypeExpr>,
         body: Box<Stmt>,
     },
+    Return {
+        value: Option<Expr>,
+    },
 
     Block(Vec<Stmt>),
 
     Expr(Expr),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Number(f64),
     String(String),
@@ -54,7 +57,7 @@ pub enum Expr {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypeExpr {
     Primitive(String),
 }

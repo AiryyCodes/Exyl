@@ -125,6 +125,11 @@ impl Parser {
         if self.check(TokenKind::LeftBracket) {
             return self.block();
         }
+
+        if self.match_token(TokenKind::Return) {
+            return self.return_stmt();
+        }
+
         self.expression_stmt()
     }
 
@@ -163,6 +168,18 @@ impl Parser {
             ty,
             value,
         })
+    }
+
+    fn return_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let mut value = None;
+
+        if !self.check(TokenKind::Semicolon) {
+            value = Some(self.expression()?);
+        }
+
+        self.consume(TokenKind::Semicolon, "Expected ';' after return value")?;
+
+        Ok(Stmt::Return { value })
     }
 
     fn fun_decl(&mut self) -> Result<Stmt, ParseError> {

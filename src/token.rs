@@ -32,6 +32,7 @@ pub enum TokenKind {
     // Keywords
     Let,
     Fun,
+    Return,
 
     // Other
     Identifier,
