@@ -33,6 +33,8 @@ pub enum TokenKind {
     Let,
     Fun,
     Return,
+    True,
+    False,
 
     // Other
     Identifier,

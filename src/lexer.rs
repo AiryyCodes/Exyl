@@ -135,6 +135,8 @@ impl Lexer {
             "let" => TokenKind::Let,
             "fun" => TokenKind::Fun,
             "return" => TokenKind::Return,
+            "true" => TokenKind::True,
+            "false" => TokenKind::False,
             _ => TokenKind::Identifier,
         };
 

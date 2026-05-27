@@ -2,16 +2,16 @@ fun add(a: i32, b: i32): i32 {
     return a + b;
 }
 
-fun takes_int(n: i32): i32 {
-    return n;
-}
-
-fun wrong_arg_type() {
-    let r: i32 = takes_int("not an int");
+fun is_same(a: i32, b: i32): bool {
+    return a == b;
 }
 
 fun main(): string {
     add(1, 1);
+
+    let same = is_same(1, 2);
+
+    let unsigned: f32 = 1.0;
 
     let hello = "Hello";
 }

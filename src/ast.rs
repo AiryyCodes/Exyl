@@ -37,6 +37,7 @@ pub enum Stmt {
 pub enum Expr {
     Number(f64),
     String(String),
+    Bool(bool),
 
     Identifier(String),
     Call {

@@ -29,7 +29,9 @@ impl SemanticAnalyzer {
     fn statement(&mut self, stmt: &Stmt) -> Result<(), String> {
         match stmt {
             Stmt::Let { name, ty, value } => {
-                let inferred_type = self.expression(value)?;
+                let explicit_type = ty.as_ref().map(|t| self.type_expression(t));
+
+                let inferred_type = self.expression(value, explicit_type.as_ref())?;
 
                 let final_type = match ty {
                     Some(type_expr) => {
@@ -117,7 +119,7 @@ impl SemanticAnalyzer {
                     }
                 };
                 let actual_type = match value {
-                    Some(expr) => self.expression(expr)?,
+                    Some(expr) => self.expression(expr, Some(&expected_type))?,
                     None => Type::Void,
                 };
 
@@ -148,7 +150,7 @@ impl SemanticAnalyzer {
                 Ok(())
             }
             Stmt::Expr(expr) => {
-                self.expression(expr)?;
+                self.expression(expr, None)?;
 
                 match expr {
                     Expr::Binary { operator, .. } => match operator.kind {
@@ -172,10 +174,31 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn expression(&self, expr: &Expr) -> Result<Type, String> {
+    fn expression(&self, expr: &Expr, expected: Option<&Type>) -> Result<Type, String> {
         match expr {
-            Expr::Number(_) => Ok(Type::I32),
+            Expr::Number(val) => {
+                if val.fract() == 0.0 {
+                    if let Some(expected_type) = expected {
+                        if expected_type.is_integer() {
+                            return Ok((*expected_type).clone());
+                        }
+
+                        if expected_type.is_float() {
+                            return Ok((*expected_type).clone());
+                        }
+                    }
+                    Ok(Type::I32) // Default fallback
+                } else {
+                    if let Some(expected_type) = expected {
+                        if expected_type.is_float() {
+                            return Ok((*expected_type).clone());
+                        }
+                    }
+                    Ok(Type::F64) // Default fallback
+                }
+            }
             Expr::String(_) => Ok(Type::String),
+            Expr::Bool(_) => Ok(Type::Bool),
 
             Expr::Identifier(name) => match self.environment.lookup(name) {
                 Some(Symbol::Variable { ty }) => Ok(ty),
@@ -190,17 +213,15 @@ impl SemanticAnalyzer {
                 right,
                 operator,
             } => {
-                let lhs = self.expression(left)?;
-                let rhs = self.expression(right)?;
+                let lhs = self.expression(left, expected)?;
+                let rhs = self.expression(right, expected)?;
 
                 match operator.kind {
                     TokenKind::Plus | TokenKind::Minus | TokenKind::Star | TokenKind::Slash => {
-                        // Simple Rule: Both sides must be exactly the same primitive
-                        if lhs == Type::I32 && rhs == Type::I32 {
-                            return Ok(Type::I32);
+                        if lhs == rhs && lhs.is_numeric() {
+                            return Ok(lhs);
                         }
 
-                        // Allow String concatenation only with '+'
                         if lhs == Type::String
                             && rhs == Type::String
                             && operator.kind == TokenKind::Plus
@@ -211,6 +232,29 @@ impl SemanticAnalyzer {
                         Err(format!(
                             "Error: Cannot apply operator '{}' to types {:?} and {:?}.",
                             operator.lexeme, lhs, rhs
+                        ))
+                    }
+                    TokenKind::Less
+                    | TokenKind::LessEqual
+                    | TokenKind::Greater
+                    | TokenKind::GreaterEqual => {
+                        if lhs == rhs && lhs.is_numeric() {
+                            return Ok(Type::Bool);
+                        }
+
+                        Err(format!(
+                            "Type Error: Cannot compare types {:?} and {:?}.",
+                            lhs, rhs
+                        ))
+                    }
+                    TokenKind::EqualEqual | TokenKind::BangEqual => {
+                        if lhs == rhs {
+                            return Ok(Type::Bool);
+                        }
+
+                        Err(format!(
+                            "Type Error: Cannot check equality between mismatched types {:?} and {:?}.",
+                            lhs, rhs
                         ))
                     }
                     _ => todo!("Implement other binary operators"),
@@ -234,7 +278,7 @@ impl SemanticAnalyzer {
                             }
 
                             for (i, arg_expr) in arguments.iter().enumerate() {
-                                let arg_type = self.expression(arg_expr)?;
+                                let arg_type = self.expression(arg_expr, expected)?;
                                 let (_, param_type) = &params[i];
 
                                 if !arg_type.is_assignable_to(param_type) {
@@ -260,16 +304,33 @@ impl SemanticAnalyzer {
             }
 
             Expr::Unary { operator, right } => {
-                let right_type = self.expression(right)?;
+                let right_type = self.expression(right, expected)?;
+
                 match operator.kind {
+                    // Numeric negation
                     TokenKind::Minus => {
-                        if right_type == Type::I32 {
-                            Ok(Type::I32)
+                        // You can negate signed integers and floats, but NOT unsigned integers!
+                        if right_type.is_signed_integer() || right_type.is_float() {
+                            Ok(right_type)
                         } else {
-                            Err(format!("Error: Cannot apply '-' to type {:?}.", right_type))
+                            Err(format!(
+                                "Type Error: Cannot apply unary '-' to non-signable type {:?}.",
+                                right_type
+                            ))
                         }
                     }
-                    _ => todo!("Implement other unary operators"),
+                    // Logical NOT
+                    TokenKind::Bang => {
+                        if right_type == Type::Bool {
+                            Ok(Type::Bool)
+                        } else {
+                            Err(format!(
+                                "Type Error: Cannot apply logical '!' to non-boolean type {:?}.",
+                                right_type
+                            ))
+                        }
+                    }
+                    _ => todo!(),
                 }
             }
 
@@ -280,7 +341,17 @@ impl SemanticAnalyzer {
     fn type_expression(&self, expr: &TypeExpr) -> Type {
         match expr {
             TypeExpr::Primitive(name) => match name.as_str() {
+                "i8" => Type::I8,
+                "i16" => Type::I16,
                 "i32" => Type::I32,
+                "i64" => Type::I64,
+                "u8" => Type::U8,
+                "u16" => Type::U16,
+                "u32" => Type::U32,
+                "u64" => Type::U64,
+                "f32" => Type::F32,
+                "f64" => Type::F64,
+                "bool" => Type::Bool,
                 "string" => Type::String,
                 "void" => Type::Void,
                 _ => panic!("Unknown primitive type: {name}"),

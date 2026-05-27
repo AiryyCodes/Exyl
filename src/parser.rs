@@ -387,6 +387,8 @@ impl Parser {
         match token.kind {
             TokenKind::Number => Ok(Expr::Number(token.lexeme.parse().unwrap())),
             TokenKind::String => Ok(Expr::String(token.lexeme)),
+            TokenKind::True => Ok(Expr::Bool(token.lexeme.parse().unwrap())),
+            TokenKind::False => Ok(Expr::Bool(token.lexeme.parse().unwrap())),
             TokenKind::Identifier => Ok(Expr::Identifier(token.lexeme)),
 
             TokenKind::LeftParen => {
