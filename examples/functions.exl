@@ -3,10 +3,10 @@ fun add(a: i32, b: i32): i32 {
 }
 
 fun is_same(a: i32, b: i32): bool {
-    return a != b;
+    return a == b;
 }
 
-fun main(): string {
+fun main() {
     add(1, 1);
 
     let same = is_same(1, 2);
