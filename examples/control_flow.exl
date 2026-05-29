@@ -1,0 +1,16 @@
+extern fun printf(format: string, ...): i32;
+
+fun main() {
+
+    if 2 == 2 {
+        printf("Hello, World!\n");
+    }
+
+    if 1 == 2 {
+        printf("True!\n");
+    } else if 1 == 3 {
+        printf("1 == 1\n");
+    } else {
+        printf("False!\n");
+    }
+}

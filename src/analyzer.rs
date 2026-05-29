@@ -145,7 +145,6 @@ impl SemanticAnalyzer {
                             ty: param_type.clone(),
                         },
                     ) {
-                        // Pop scope before returning error
                         self.pop_scope();
                         return Err(self.record_error(
                             format!("Scope Parameter Error: {}", env_err),
@@ -222,6 +221,38 @@ impl SemanticAnalyzer {
                 };
 
                 Ok(TypedStmt::Return { value: typed_value })
+            }
+
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                let typed_condition = self.expression(condition, None)?;
+
+                if typed_condition.get_type() != Type::Bool {
+                    return Err(TypeError {
+                        message: format!(
+                            "Type Error: 'if' condition statement must evaluate strictly to a 'bool' type. Found: {:?}",
+                            typed_condition.get_type()
+                        ),
+                        span: condition.span().clone(),
+                    });
+                }
+
+                let typed_then = self.statement(then_branch)?;
+
+                let typed_else = match else_branch {
+                    Some(else_stmt) => Some(Box::new(self.statement(else_stmt)?)),
+                    None => None,
+                };
+
+                Ok(TypedStmt::If {
+                    condition: typed_condition,
+                    then_branch: Box::new(typed_then),
+                    else_branch: typed_else,
+                })
             }
 
             Stmt::Block(statements, ..) => {

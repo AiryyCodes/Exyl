@@ -21,8 +21,8 @@ pub enum TokenKind {
     BangEqual,
     LeftParen,
     RightParen,
-    LeftBracket,
-    RightBracket,
+    LeftBrace,
+    RightBrace,
     Colon,
     Semicolon,
     Comma,
@@ -39,6 +39,8 @@ pub enum TokenKind {
     True,
     False,
     Extern,
+    If,
+    Else,
 
     // Other
     Identifier,

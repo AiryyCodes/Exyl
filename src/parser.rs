@@ -111,6 +111,8 @@ impl Parser {
                 TokenKind::Let => return,
                 TokenKind::Fun => return,
                 TokenKind::Extern => return,
+                TokenKind::If => return,
+                TokenKind::Else => return,
                 _ => {}
             }
 
@@ -159,12 +161,16 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseError> {
-        if self.check(TokenKind::LeftBracket) {
+        if self.check(TokenKind::LeftBrace) {
             return self.block();
         }
 
         if self.match_token(TokenKind::Return) {
             return self.return_stmt();
+        }
+
+        if self.match_token(TokenKind::If) {
+            return self.if_stmt();
         }
 
         self.expression_stmt()
@@ -189,6 +195,41 @@ impl Parser {
         };
 
         Ok(Stmt::Expr(expr, span))
+    }
+
+    fn if_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let if_token = self.previous();
+
+        let condition = self.expression()?;
+        let then_branch = self.block()?;
+
+        let mut else_branch = None;
+        if self.match_token(TokenKind::Else) {
+            if self.match_token(TokenKind::If) {
+                else_branch = Some(self.if_stmt()?);
+            } else {
+                else_branch = Some(self.block()?);
+            }
+        }
+
+        let end_offset = match &else_branch {
+            Some(else_stmt) => else_stmt.span().end,
+            None => then_branch.span().end,
+        };
+
+        let span = Span {
+            line: if_token.span.line,
+            col: if_token.span.col,
+            start: if_token.span.start,
+            end: end_offset,
+        };
+
+        Ok(Stmt::If {
+            condition,
+            then_branch: Box::new(then_branch),
+            else_branch: else_branch.map(Box::new),
+            span,
+        })
     }
 
     fn let_decl(&mut self) -> Result<Stmt, ParseError> {
@@ -340,15 +381,15 @@ impl Parser {
 
     fn block(&mut self) -> Result<Stmt, ParseError> {
         let open_bracket =
-            self.consume_expected(TokenKind::LeftBracket, "an opening block delimiter '{'")?;
+            self.consume_expected(TokenKind::LeftBrace, "an opening block delimiter '{'")?;
 
         let mut body = vec![];
-        while !self.is_at_end() && !self.check(TokenKind::RightBracket) {
+        while !self.is_at_end() && !self.check(TokenKind::RightBrace) {
             body.push(self.declaration(false)?);
         }
 
         let close_bracket = self.consume_expected(
-            TokenKind::RightBracket,
+            TokenKind::RightBrace,
             "a closing block brace structure completion '}'",
         )?;
 

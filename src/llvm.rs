@@ -55,12 +55,45 @@ impl<'ctx> LlvmGenerator<'ctx> {
 impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
     type Value = BasicValueEnum<'ctx>;
     type TypeRepresentation = BasicTypeEnum<'ctx>;
+    type BasicBlock = inkwell::basic_block::BasicBlock<'ctx>;
 
     fn is_block_terminated(&self) -> bool {
         self.builder
             .get_insert_block()
             .and_then(|b| b.get_terminator())
             .is_some()
+    }
+
+    fn append_basic_block(&self, name: &str) -> Self::BasicBlock {
+        let current_fn = self
+            .builder
+            .get_insert_block()
+            .and_then(|b| b.get_parent())
+            .expect("Cannot create basic blocks outside of a function context.");
+
+        self.context.append_basic_block(current_fn, name)
+    }
+
+    fn position_at_end(&self, block: &Self::BasicBlock) {
+        self.builder.position_at_end(*block);
+    }
+
+    fn build_conditional_branch(
+        &self,
+        cond: Self::Value,
+        then_block: &Self::BasicBlock,
+        else_block: &Self::BasicBlock,
+    ) {
+        let int_cond = cond.into_int_value();
+        self.builder
+            .build_conditional_branch(int_cond, *then_block, *else_block)
+            .unwrap();
+    }
+
+    fn build_unconditional_branch(&self, target_block: &Self::BasicBlock) {
+        self.builder
+            .build_unconditional_branch(*target_block)
+            .unwrap();
     }
 
     fn begin_function(

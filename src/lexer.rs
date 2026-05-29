@@ -101,8 +101,8 @@ impl Lexer {
 
                 '(' => self.add_token(&mut tokens, TokenKind::LeftParen),
                 ')' => self.add_token(&mut tokens, TokenKind::RightParen),
-                '{' => self.add_token(&mut tokens, TokenKind::LeftBracket),
-                '}' => self.add_token(&mut tokens, TokenKind::RightBracket),
+                '{' => self.add_token(&mut tokens, TokenKind::LeftBrace),
+                '}' => self.add_token(&mut tokens, TokenKind::RightBrace),
 
                 ':' => self.add_token(&mut tokens, TokenKind::Colon),
                 ';' => self.add_token(&mut tokens, TokenKind::Semicolon),
@@ -181,7 +181,8 @@ impl Lexer {
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             "extern" => TokenKind::Extern,
-            "..." => TokenKind::Ellipsis,
+            "if" => TokenKind::If,
+            "else" => TokenKind::Else,
             _ => TokenKind::Identifier,
         };
 

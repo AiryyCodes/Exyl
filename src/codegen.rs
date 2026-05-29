@@ -3,8 +3,20 @@ use crate::types::Type;
 pub trait BuilderBackend {
     type Value;
     type TypeRepresentation;
+    type BasicBlock;
 
     fn is_block_terminated(&self) -> bool;
+
+    // Control flow
+    fn append_basic_block(&self, name: &str) -> Self::BasicBlock;
+    fn position_at_end(&self, block: &Self::BasicBlock);
+    fn build_conditional_branch(
+        &self,
+        cond: Self::Value,
+        then_block: &Self::BasicBlock,
+        else_block: &Self::BasicBlock,
+    );
+    fn build_unconditional_branch(&self, target_block: &Self::BasicBlock);
 
     fn begin_function(
         &mut self,

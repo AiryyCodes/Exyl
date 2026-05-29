@@ -32,6 +32,12 @@ pub enum Stmt {
         value: Option<Expr>,
         span: Span,
     },
+    If {
+        condition: Expr,
+        then_branch: Box<Stmt>,
+        else_branch: Option<Box<Stmt>>,
+        span: Span,
+    },
     Block(Vec<Stmt>, Span),
     Expr(Expr, Span),
 }
@@ -44,6 +50,7 @@ impl Stmt {
             Stmt::Return { span, .. } => *span,
             Stmt::Block(_, span) => *span,
             Stmt::Expr(_, span) => *span,
+            Stmt::If { span, .. } => *span,
         }
     }
 }

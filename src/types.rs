@@ -72,6 +72,11 @@ pub enum TypedStmt {
     Return {
         value: Option<TypedExpr>,
     },
+    If {
+        condition: TypedExpr,
+        then_branch: Box<TypedStmt>,
+        else_branch: Option<Box<TypedStmt>>,
+    },
     Block(Vec<TypedStmt>),
     Expr(TypedExpr),
 }
@@ -134,6 +139,45 @@ impl<B: BuilderBackend> Emit<B> for TypedStmt {
                 }
 
                 backend.end_function();
+            }
+
+            TypedStmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let cond_val = condition.emit(backend);
+
+                let then_block = backend.append_basic_block("if.then");
+                let merge_block = backend.append_basic_block("if.merge");
+
+                let else_block_storage;
+                let else_block = if else_branch.is_some() {
+                    else_block_storage = backend.append_basic_block("if.else");
+                    &else_block_storage
+                } else {
+                    &merge_block
+                };
+                backend.build_conditional_branch(cond_val, &then_block, &else_block);
+
+                backend.position_at_end(&then_block);
+                then_branch.emit(backend);
+
+                if !backend.is_block_terminated() {
+                    backend.build_unconditional_branch(&merge_block);
+                }
+
+                if let Some(else_stmt) = else_branch {
+                    backend.position_at_end(&else_block);
+                    else_stmt.emit(backend);
+
+                    // If the else_branch didn't return, jump to merge
+                    if !backend.is_block_terminated() {
+                        backend.build_unconditional_branch(&merge_block);
+                    }
+                }
+
+                backend.position_at_end(&merge_block);
             }
         }
     }
