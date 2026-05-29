@@ -22,7 +22,7 @@ impl Parser {
         let mut errors = vec![];
 
         while !self.is_at_end() {
-            match self.declaration() {
+            match self.declaration(false) {
                 Ok(node) => nodes.push(node),
                 Err(e) => {
                     errors.push(e);
@@ -92,6 +92,8 @@ impl Parser {
             // Keywords
             match self.peek().kind {
                 TokenKind::Let => return,
+                TokenKind::Fun => return,
+                TokenKind::Extern => return,
                 _ => {}
             }
 
@@ -111,11 +113,30 @@ impl Parser {
         }
     }
 
-    fn declaration(&mut self) -> Result<Stmt, ParseError> {
+    fn declaration(&mut self, is_extern: bool) -> Result<Stmt, ParseError> {
         if self.match_token(TokenKind::Let) {
+            if is_extern {
+                return Err(self.error(
+                    "Modifiers like 'extern' cannot be applied to 'let' declarations yet.".into(),
+                ));
+            }
             return self.let_decl();
-        } else if self.match_token(TokenKind::Fun) {
-            return self.fun_decl();
+        }
+
+        if self.match_token(TokenKind::Fun) {
+            return self.fun_decl(is_extern);
+        }
+
+        if self.match_token(TokenKind::Extern) {
+            // Prevent 'extern extern'
+            if is_extern {
+                return Err(self.error("Duplicate 'extern' modifier".into()));
+            }
+            return self.declaration(true);
+        }
+
+        if is_extern {
+            return Err(self.error("Expected a declaration after 'extern'".into()));
         }
 
         self.statement()
@@ -182,7 +203,7 @@ impl Parser {
         Ok(Stmt::Return { value })
     }
 
-    fn fun_decl(&mut self) -> Result<Stmt, ParseError> {
+    fn fun_decl(&mut self, is_extern: bool) -> Result<Stmt, ParseError> {
         let name = self.consume(TokenKind::Identifier, "Expected function name")?;
 
         self.consume(TokenKind::LeftParen, "Expected '('")?;
@@ -212,13 +233,22 @@ impl Parser {
             return_type = Some(self.type_expression()?);
         }
 
-        let body = self.block()?;
+        let mut body = None;
+        if !is_extern {
+            body = Some(Box::new(self.block()?));
+        } else {
+            self.consume(
+                TokenKind::Semicolon,
+                "Expected ';' after extern declaration",
+            )?;
+        }
 
         Ok(Stmt::Fun {
             name: name.lexeme,
-            body: Box::new(body),
             parameters: params,
             return_type,
+            is_extern,
+            body: body,
         })
     }
 
@@ -227,7 +257,8 @@ impl Parser {
 
         let mut body = vec![];
         while !self.is_at_end() && !self.check(TokenKind::RightBracket) {
-            body.push(self.declaration()?);
+            // May need to check for extern keyword
+            body.push(self.declaration(false)?);
         }
 
         self.consume(TokenKind::RightBracket, "Expected '}'")?;

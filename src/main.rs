@@ -73,6 +73,13 @@ fn compile(raw_program: &Program, args: &Args) -> Result<(), String> {
         node.emit(&mut backend);
     }
 
+    backend.module.print_to_stderr();
+
+    if let Err(err) = backend.module.verify() {
+        eprintln!("\n❌ LLVM Verification Failed:\n{}", err.to_string());
+        std::process::exit(1);
+    }
+
     Target::initialize_native(&InitializationConfig::default())
         .map_err(|e| format!("Failed to initialize target: {}", e))?;
 
@@ -131,9 +138,16 @@ fn main() {
     let tokens = lexer.analyze();
 
     let mut parser = parser::Parser::new(tokens);
-    let parsed = parser.parse();
+    let (program, parse_errors) = parser.parse();
 
-    match compile(&parsed.0, &args) {
+    if !parse_errors.is_empty() {
+        for error in parse_errors {
+            println!("{}", error.message);
+        }
+        return;
+    }
+
+    match compile(&program, &args) {
         Ok(_) => {}
         Err(msg) => {
             println!("{msg}");

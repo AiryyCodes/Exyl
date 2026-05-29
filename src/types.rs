@@ -65,7 +65,8 @@ pub enum TypedStmt {
         name: String,
         parameters: Vec<(String, Type)>,
         return_type: Type,
-        body: Box<TypedStmt>, // Must be a TypedStmt::Block
+        is_extern: bool,
+        body: Option<Box<TypedStmt>>, // Must be a TypedStmt::Block
     },
     Return {
         value: Option<TypedExpr>,
@@ -104,16 +105,24 @@ impl<B: BuilderBackend> Emit<B> for TypedStmt {
                 name,
                 parameters,
                 return_type,
+                is_extern,
                 body,
             } => {
-                let param_values = backend.begin_function(name, parameters, return_type);
+                let param_values =
+                    backend.begin_function(name, parameters, *is_extern, return_type);
+
+                if *is_extern {
+                    return;
+                }
 
                 for ((param_name, param_type), raw_value) in parameters.iter().zip(param_values) {
                     backend.build_alloca(param_name, param_type);
                     backend.build_store(param_name, raw_value);
                 }
 
-                body.emit(backend);
+                if let Some(body) = body {
+                    body.emit(backend);
+                }
 
                 if !backend.is_block_terminated() {
                     match return_type {

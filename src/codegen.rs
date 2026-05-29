@@ -10,6 +10,7 @@ pub trait BuilderBackend {
         &mut self,
         name: &str,
         parameters: &[(String, Type)],
+        is_extern: bool,
         return_type: &Type,
     ) -> Vec<Self::Value>;
 

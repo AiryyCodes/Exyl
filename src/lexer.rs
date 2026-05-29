@@ -137,6 +137,7 @@ impl Lexer {
             "return" => TokenKind::Return,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
+            "extern" => TokenKind::Extern,
             _ => TokenKind::Identifier,
         };
 
@@ -157,8 +158,28 @@ impl Lexer {
     }
 
     fn analyze_string(&mut self, tokens: &mut Vec<Token>) {
+        let mut parsed_string = String::new();
+
         while !self.is_at_end() && self.peek() != '"' {
-            self.advance();
+            let c = self.advance();
+
+            if c == '\\' {
+                if self.is_at_end() {
+                    panic!("Unterminated string escape sequence");
+                }
+
+                match self.advance() {
+                    'n' => parsed_string.push('\n'),  // Push a real newline byte
+                    't' => parsed_string.push('\t'),  // Push a real tab byte
+                    'r' => parsed_string.push('\r'),  // Push a real carriage return
+                    '\\' => parsed_string.push('\\'), // Push a single literal backslash
+                    '"' => parsed_string.push('"'),   // Push a literal embedded quote
+                    other => panic!("Unknown escape sequence: \\{}", other),
+                }
+            } else {
+                // Normal character, just append it
+                parsed_string.push(c);
+            }
         }
 
         if self.is_at_end() {
@@ -167,13 +188,9 @@ impl Lexer {
 
         self.advance();
 
-        let text: String = self.source[self.start + 1..self.current - 1]
-            .iter()
-            .collect();
-
         tokens.push(Token {
             kind: TokenKind::String,
-            lexeme: text,
+            lexeme: parsed_string,
         });
     }
 

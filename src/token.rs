@@ -35,6 +35,7 @@ pub enum TokenKind {
     Return,
     True,
     False,
+    Extern,
 
     // Other
     Identifier,

@@ -1,6 +1,6 @@
 use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::module::Module;
+use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValue, BasicValueEnum, PointerValue};
 use inkwell::{FloatPredicate, IntPredicate};
@@ -38,10 +38,15 @@ impl<'ctx> LlvmGenerator<'ctx> {
             Type::F32 => self.context.f32_type().as_basic_type_enum(),
             Type::F64 => self.context.f64_type().as_basic_type_enum(),
             Type::Bool => self.context.bool_type().as_basic_type_enum(),
-            Type::String => self
-                .context
-                .ptr_type(inkwell::AddressSpace::from(0))
-                .as_basic_type_enum(),
+            Type::String => {
+                let i8_ptr = self.context.ptr_type(inkwell::AddressSpace::from(0));
+                let i32_type = self.context.i32_type();
+
+                // Return an anonymous structure type matching your value footprint
+                self.context
+                    .struct_type(&[i8_ptr.into(), i32_type.into()], false)
+                    .as_basic_type_enum()
+            }
             Type::Void => panic!("Void type cannot represent raw values."),
         }
     }
@@ -62,6 +67,7 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
         &mut self,
         name: &str,
         parameters: &[(String, Type)],
+        is_extern: bool,
         return_type: &Type,
     ) -> Vec<Self::Value> {
         let param_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = parameters
@@ -82,8 +88,12 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
 
         let function = self.module.add_function(name, fn_type, None);
 
-        let entry_block = self.context.append_basic_block(function, "entry");
-        self.builder.position_at_end(entry_block);
+        if is_extern {
+            function.set_linkage(Linkage::External);
+        } else {
+            let entry_block = self.context.append_basic_block(function, "entry");
+            self.builder.position_at_end(entry_block);
+        }
 
         function.get_param_iter().map(|param| param).collect()
     }
@@ -436,11 +446,33 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
     }
 
     fn const_string(&self, val: String) -> Self::Value {
-        let string = self
+        let context = &self.context;
+        let i32_type = context.i32_type();
+
+        let global_string = self
             .builder
             .build_global_string_ptr(val.as_str(), "str")
             .unwrap();
-        string.as_pointer_value().as_basic_value_enum()
+        let ptr_value = global_string.as_pointer_value();
+
+        let len_value = i32_type.const_int(val.len() as u64, false);
+
+        let struct_type =
+            context.struct_type(&[ptr_value.get_type().into(), i32_type.into()], false);
+
+        let struct_undef = struct_type.get_undef();
+
+        let struct_with_ptr = self
+            .builder
+            .build_insert_value(struct_undef, ptr_value, 0, "str_struct_ptr")
+            .unwrap();
+
+        let final_struct = self
+            .builder
+            .build_insert_value(struct_with_ptr, len_value, 1, "str_struct_len")
+            .unwrap();
+
+        final_struct.into_struct_value().as_basic_value_enum()
     }
 
     fn const_bool(&self, val: bool) -> Self::Value {

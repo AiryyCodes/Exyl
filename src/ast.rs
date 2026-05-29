@@ -22,7 +22,8 @@ pub enum Stmt {
         name: String,
         parameters: Vec<(String, TypeExpr)>,
         return_type: Option<TypeExpr>,
-        body: Box<Stmt>,
+        is_extern: bool,
+        body: Option<Box<Stmt>>,
     },
     Return {
         value: Option<Expr>,

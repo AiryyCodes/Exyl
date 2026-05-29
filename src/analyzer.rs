@@ -65,6 +65,7 @@ impl SemanticAnalyzer {
                 name,
                 parameters,
                 return_type,
+                is_extern,
                 body,
             } => {
                 let mut resolved_params = vec![];
@@ -100,17 +101,23 @@ impl SemanticAnalyzer {
                     )?;
                 }
 
-                let typed_body = if let Stmt::Block(statements) = &**body {
-                    let mut typed_statements = vec![];
-                    for s in statements {
-                        typed_statements.push(self.statement(s)?);
+                let typed_body = match body.as_deref() {
+                    Some(Stmt::Block(statements)) => {
+                        let mut typed_statements = vec![];
+                        for s in statements {
+                            typed_statements.push(self.statement(s)?);
+                        }
+                        Some(Box::new(TypedStmt::Block(typed_statements)))
                     }
-                    TypedStmt::Block(typed_statements)
-                } else {
-                    return Err(format!(
-                        "Compiler Error: Function body for '{}' must be a block.",
-                        name
-                    ));
+
+                    Some(_) => {
+                        return Err(format!(
+                            "Error: Function body for '{}' must be a block.",
+                            name
+                        ));
+                    }
+
+                    None => None,
                 };
 
                 self.current_return_type = previous_return;
@@ -125,7 +132,8 @@ impl SemanticAnalyzer {
                     name: name.clone(),
                     parameters: resolved_params,
                     return_type: resolved_return,
-                    body: Box::new(typed_body),
+                    is_extern: *is_extern,
+                    body: typed_body,
                 })
             }
 
