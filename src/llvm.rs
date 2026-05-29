@@ -68,21 +68,33 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
         name: &str,
         parameters: &[(String, Type)],
         is_extern: bool,
+        is_variadic: bool,
         return_type: &Type,
     ) -> Vec<Self::Value> {
         let param_types: Vec<inkwell::types::BasicTypeEnum<'ctx>> = parameters
             .iter()
-            .map(|(_, ty)| self.get_llvm_type(ty))
+            .map(|(_, ty)| {
+                if is_extern && matches!(ty, Type::String) {
+                    self.context
+                        .ptr_type(inkwell::AddressSpace::from(0))
+                        .as_basic_type_enum()
+                } else {
+                    self.get_llvm_type(ty)
+                }
+            })
             .collect();
 
         let param_metadata: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
             param_types.iter().map(|ty| (*ty).into()).collect();
 
         let fn_type = match return_type {
-            Type::Void => self.context.void_type().fn_type(&param_metadata, false),
+            Type::Void => self
+                .context
+                .void_type()
+                .fn_type(&param_metadata, is_variadic),
             _ => {
                 let llvm_ret = self.get_llvm_type(return_type);
-                llvm_ret.fn_type(&param_metadata, false)
+                llvm_ret.fn_type(&param_metadata, is_variadic)
             }
         };
 
@@ -406,16 +418,38 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
             .get_function(name)
             .unwrap_or_else(|| panic!("Undefined function: {}", name));
 
-        let args_metadata: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
-            args.iter().map(|arg| (*arg).into()).collect();
+        let is_extern = function.get_linkage() == inkwell::module::Linkage::External;
+
+        let processed_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = args
+            .iter()
+            .enumerate()
+            .map(|(_, arg)| {
+                if is_extern && arg.is_struct_value() {
+                    let struct_val = arg.into_struct_value();
+                    let raw_ptr = self
+                        .builder
+                        .build_extract_value(struct_val, 0, "abi_str_ptr")
+                        .unwrap();
+                    raw_ptr.into()
+                } else {
+                    (*arg).into()
+                }
+            })
+            .collect();
 
         let call_site = self
             .builder
-            .build_call(function, &args_metadata, "call")
+            .build_call(function, &processed_args, "call")
             .unwrap();
 
         match return_type {
-            Type::Void => panic!("build_call cannot return a value for void functions"),
+            Type::Void => {
+                // Return an integer 0 or similar dummy value if your trait mandates returning a Self::Value
+                self.context
+                    .i32_type()
+                    .const_int(0, false)
+                    .as_basic_value_enum()
+            }
             _ => call_site.try_as_basic_value().unwrap_basic(),
         }
     }

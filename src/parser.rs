@@ -117,7 +117,7 @@ impl Parser {
         if self.match_token(TokenKind::Let) {
             if is_extern {
                 return Err(self.error(
-                    "Modifiers like 'extern' cannot be applied to 'let' declarations yet.".into(),
+                    "Modifiers like 'extern' cannot be applied to 'let' declarations yet.",
                 ));
             }
             return self.let_decl();
@@ -130,13 +130,13 @@ impl Parser {
         if self.match_token(TokenKind::Extern) {
             // Prevent 'extern extern'
             if is_extern {
-                return Err(self.error("Duplicate 'extern' modifier".into()));
+                return Err(self.error("Duplicate 'extern' modifier"));
             }
             return self.declaration(true);
         }
 
         if is_extern {
-            return Err(self.error("Expected a declaration after 'extern'".into()));
+            return Err(self.error("Expected a declaration after 'extern'"));
         }
 
         self.statement()
@@ -209,9 +209,21 @@ impl Parser {
         self.consume(TokenKind::LeftParen, "Expected '('")?;
 
         let mut params = vec![];
+        let mut is_variadic = false;
 
         if !self.check(TokenKind::RightParen) {
             loop {
+                if self.match_token(TokenKind::Ellipsis) {
+                    is_variadic = true;
+
+                    // Variadics must be the last item. If a comma follows, it's a syntax error.
+                    if self.check(TokenKind::Comma) {
+                        return Err(self.error("Variadic parameter must be the last parameter"));
+                    }
+
+                    break;
+                }
+
                 let param_name = self.consume(TokenKind::Identifier, "Expected parameter name")?;
 
                 self.consume(TokenKind::Colon, "Expected ':' after parameter name")?;
@@ -246,6 +258,7 @@ impl Parser {
         Ok(Stmt::Fun {
             name: name.lexeme,
             parameters: params,
+            is_variadic,
             return_type,
             is_extern,
             body: body,

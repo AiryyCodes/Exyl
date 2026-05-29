@@ -9,6 +9,7 @@ pub enum Symbol {
     },
     Function {
         params: Vec<(String, Type)>,
+        is_variadic: bool,
         return_type: Type,
     },
 }

@@ -64,6 +64,7 @@ impl SemanticAnalyzer {
             Stmt::Fun {
                 name,
                 parameters,
+                is_variadic,
                 return_type,
                 is_extern,
                 body,
@@ -83,6 +84,7 @@ impl SemanticAnalyzer {
 
                 let symbol = Symbol::Function {
                     params: resolved_params.clone(),
+                    is_variadic: *is_variadic,
                     return_type: resolved_return.clone(),
                 };
 
@@ -131,6 +133,7 @@ impl SemanticAnalyzer {
                 Ok(TypedStmt::Fun {
                     name: name.clone(),
                     parameters: resolved_params,
+                    is_variadic: *is_variadic,
                     return_type: resolved_return,
                     is_extern: *is_extern,
                     body: typed_body,
@@ -283,9 +286,19 @@ impl SemanticAnalyzer {
                     match self.environment.lookup(func_name) {
                         Some(Symbol::Function {
                             params,
+                            is_variadic,
                             return_type,
                         }) => {
-                            if params.len() != arguments.len() {
+                            if is_variadic {
+                                if arguments.len() < params.len() {
+                                    return Err(format!(
+                                        "Error: Variadic function '{}' expects at least {} arguments, but got {}.",
+                                        func_name,
+                                        params.len(),
+                                        arguments.len()
+                                    ));
+                                }
+                            } else if params.len() != arguments.len() {
                                 return Err(format!(
                                     "Error: Function '{}' expects {} arguments, but got {}.",
                                     func_name,
@@ -295,7 +308,8 @@ impl SemanticAnalyzer {
                             }
 
                             let mut typed_arguments = vec![];
-                            for (i, arg_expr) in arguments.iter().enumerate() {
+                            for i in 0..params.len() {
+                                let arg_expr = &arguments[i];
                                 let (_, param_type) = &params[i];
                                 let typed_arg = self.expression(arg_expr, Some(param_type))?;
 
@@ -308,6 +322,18 @@ impl SemanticAnalyzer {
                                     ));
                                 }
                                 typed_arguments.push(typed_arg);
+                            }
+
+                            if is_variadic {
+                                for i in params.len()..arguments.len() {
+                                    let arg_expr = &arguments[i];
+                                    // We pass None for expected_type context since these can be heterogeneous
+                                    let typed_arg = self.expression(arg_expr, None)?;
+
+                                    // For low-level un-typed C variadics like printf, any valid
+                                    // expression is allowed to pass through here unchecked.
+                                    typed_arguments.push(typed_arg);
+                                }
                             }
 
                             // Reconstruct callee identifier with its function signature/type

@@ -97,6 +97,22 @@ impl Lexer {
                 ';' => self.add_token(&mut tokens, TokenKind::Semicolon),
                 ',' => self.add_token(&mut tokens, TokenKind::Comma),
 
+                '.' => {
+                    if self.peek() == '.' {
+                        if self.current + 1 < self.source.len()
+                            && self.source[self.current + 1] == '.'
+                        {
+                            self.advance(); // Consume the 2nd dot
+                            self.advance(); // Consume the 3rd dot
+                            self.add_token(&mut tokens, TokenKind::Ellipsis);
+                        } else {
+                            panic!("Unexpected character: '.'");
+                        }
+                    } else {
+                        // self.add_token(&mut tokens, TokenKind::Dot);
+                    }
+                }
+
                 '"' => {
                     self.analyze_string(&mut tokens);
                 }
@@ -105,7 +121,7 @@ impl Lexer {
                     self.analyze_identifier(&mut tokens);
                 }
 
-                c if c.is_ascii_digit() || c == '.' => {
+                c if c.is_ascii_digit() => {
                     self.analyze_number(&mut tokens);
                 }
 
@@ -138,6 +154,7 @@ impl Lexer {
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             "extern" => TokenKind::Extern,
+            "..." => TokenKind::Ellipsis,
             _ => TokenKind::Identifier,
         };
 

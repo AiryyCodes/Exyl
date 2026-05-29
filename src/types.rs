@@ -64,6 +64,7 @@ pub enum TypedStmt {
     Fun {
         name: String,
         parameters: Vec<(String, Type)>,
+        is_variadic: bool,
         return_type: Type,
         is_extern: bool,
         body: Option<Box<TypedStmt>>, // Must be a TypedStmt::Block
@@ -104,12 +105,13 @@ impl<B: BuilderBackend> Emit<B> for TypedStmt {
             TypedStmt::Fun {
                 name,
                 parameters,
+                is_variadic,
                 return_type,
                 is_extern,
                 body,
             } => {
                 let param_values =
-                    backend.begin_function(name, parameters, *is_extern, return_type);
+                    backend.begin_function(name, parameters, *is_extern, *is_variadic, return_type);
 
                 if *is_extern {
                     return;

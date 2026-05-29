@@ -1,4 +1,4 @@
-extern fun printf(format: string): i32;
+extern fun printf(format: string, ...): i32;
 
 fun add(a: i32, b: i32): i32 {
     return a + b;
@@ -13,9 +13,7 @@ fun main() {
 
     let same = is_same(1, 2);
 
-    let unsigned: f32 = 1.0;
+    let unsigned: u32 = 1.0;
 
-    let hello = "Hello";
-
-    printf("Hello, World!\n");
+    let lang = "Exyl";
 }

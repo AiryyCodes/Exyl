@@ -21,6 +21,7 @@ pub enum Stmt {
     Fun {
         name: String,
         parameters: Vec<(String, TypeExpr)>,
+        is_variadic: bool,
         return_type: Option<TypeExpr>,
         is_extern: bool,
         body: Option<Box<Stmt>>,

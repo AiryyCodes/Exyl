@@ -24,6 +24,7 @@ pub enum TokenKind {
     Colon,
     Semicolon,
     Comma,
+    Ellipsis,
 
     // Literals
     Number,

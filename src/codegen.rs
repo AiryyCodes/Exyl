@@ -11,6 +11,7 @@ pub trait BuilderBackend {
         name: &str,
         parameters: &[(String, Type)],
         is_extern: bool,
+        is_variadic: bool,
         return_type: &Type,
     ) -> Vec<Self::Value>;
 
