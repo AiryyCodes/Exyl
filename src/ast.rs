@@ -38,6 +38,11 @@ pub enum Stmt {
         else_branch: Option<Box<Stmt>>,
         span: Span,
     },
+    While {
+        condition: Expr,
+        body: Box<Stmt>,
+        span: Span,
+    },
     Block(Vec<Stmt>, Span),
     Expr(Expr, Span),
 }
@@ -51,6 +56,7 @@ impl Stmt {
             Stmt::Block(_, span) => *span,
             Stmt::Expr(_, span) => *span,
             Stmt::If { span, .. } => *span,
+            Stmt::While { span, .. } => *span,
         }
     }
 }

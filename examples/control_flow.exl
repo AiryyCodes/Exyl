@@ -13,4 +13,11 @@ fun main() {
     } else {
         printf("False!\n");
     }
+
+    let count = 0;
+    while count < 5 {
+        printf("Count: %d\n", count);
+
+        count = count + 1;
+    }
 }

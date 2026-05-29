@@ -77,6 +77,11 @@ pub enum TypedStmt {
         then_branch: Box<TypedStmt>,
         else_branch: Option<Box<TypedStmt>>,
     },
+    While {
+        condition: TypedExpr,
+        body: Box<TypedStmt>,
+    },
+
     Block(Vec<TypedStmt>),
     Expr(TypedExpr),
 }
@@ -178,6 +183,30 @@ impl<B: BuilderBackend> Emit<B> for TypedStmt {
                 }
 
                 backend.position_at_end(&merge_block);
+            }
+
+            TypedStmt::While { condition, body } => {
+                let cond_block = backend.append_basic_block("loop.cond");
+                let body_block = backend.append_basic_block("loop.body");
+                let exit_block = backend.append_basic_block("loop.exit");
+
+                // Fall into the condition check
+                backend.build_unconditional_branch(&cond_block);
+
+                // Condition block
+                backend.position_at_end(&cond_block);
+                let cond_val = condition.emit(backend);
+                backend.build_conditional_branch(cond_val, &body_block, &exit_block);
+
+                // Body block
+                backend.position_at_end(&body_block);
+                body.emit(backend);
+                if !backend.is_block_terminated() {
+                    backend.build_unconditional_branch(&cond_block);
+                }
+
+                // Exit block
+                backend.position_at_end(&exit_block);
             }
         }
     }

@@ -183,6 +183,7 @@ impl Lexer {
             "extern" => TokenKind::Extern,
             "if" => TokenKind::If,
             "else" => TokenKind::Else,
+            "while" => TokenKind::While,
             _ => TokenKind::Identifier,
         };
 

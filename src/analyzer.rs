@@ -255,6 +255,29 @@ impl SemanticAnalyzer {
                 })
             }
 
+            Stmt::While {
+                condition, body, ..
+            } => {
+                let typed_condition = self.expression(condition, None)?;
+
+                if typed_condition.get_type() != Type::Bool {
+                    return Err(TypeError {
+                        message: format!(
+                            "Type Error: 'while' condition statement must evaluate strictly to a 'bool' type. Found: {:?}",
+                            typed_condition.get_type()
+                        ),
+                        span: condition.span().clone(),
+                    });
+                }
+
+                let typed_body = self.statement(body)?;
+
+                Ok(TypedStmt::While {
+                    condition: typed_condition,
+                    body: Box::new(typed_body),
+                })
+            }
+
             Stmt::Block(statements, ..) => {
                 let current_env = std::mem::replace(&mut self.environment, Environment::new(None));
                 self.environment = Environment::new(Some(Box::new(current_env)));

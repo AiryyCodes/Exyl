@@ -41,6 +41,7 @@ pub enum TokenKind {
     Extern,
     If,
     Else,
+    While,
 
     // Other
     Identifier,

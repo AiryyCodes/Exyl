@@ -113,6 +113,7 @@ impl Parser {
                 TokenKind::Extern => return,
                 TokenKind::If => return,
                 TokenKind::Else => return,
+                TokenKind::While => return,
                 _ => {}
             }
 
@@ -173,6 +174,10 @@ impl Parser {
             return self.if_stmt();
         }
 
+        if self.match_token(TokenKind::While) {
+            return self.while_stmt();
+        }
+
         self.expression_stmt()
     }
 
@@ -228,6 +233,26 @@ impl Parser {
             condition,
             then_branch: Box::new(then_branch),
             else_branch: else_branch.map(Box::new),
+            span,
+        })
+    }
+
+    fn while_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let while_token = self.previous();
+
+        let condition = self.expression()?;
+        let body = self.block()?;
+
+        let span = Span {
+            line: while_token.span.line,
+            col: while_token.span.col,
+            start: while_token.span.start,
+            end: body.span().end,
+        };
+
+        Ok(Stmt::While {
+            condition,
+            body: Box::new(body),
             span,
         })
     }
