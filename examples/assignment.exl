@@ -1,0 +1,9 @@
+extern fun printf(format: string, ...): i32;
+
+fun main() {
+    let number = 1;
+
+    number = 69;
+
+    printf("Number: %d\n", number);
+}

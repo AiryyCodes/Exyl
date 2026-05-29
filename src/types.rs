@@ -145,6 +145,11 @@ pub enum TypedExpr {
     String(String),
     Bool(bool),
     Identifier(String, Type),
+    Assignment {
+        name: String,
+        value: Box<TypedExpr>,
+        ty: Type,
+    },
     Binary {
         left: Box<TypedExpr>,
         right: Box<TypedExpr>,
@@ -171,6 +176,7 @@ impl TypedExpr {
             TypedExpr::Binary { ty, .. } => ty.clone(),
             TypedExpr::Unary { ty, .. } => ty.clone(),
             TypedExpr::Call { return_type, .. } => return_type.clone(),
+            TypedExpr::Assignment { ty, .. } => ty.clone(),
 
             TypedExpr::String(_) => Type::String,
             TypedExpr::Bool(_) => Type::Bool,
@@ -188,6 +194,14 @@ impl<B: BuilderBackend> Emit<B> for TypedExpr {
             TypedExpr::Bool(val) => backend.const_bool(*val),
 
             TypedExpr::Identifier(name, ty) => backend.build_load(name, ty),
+
+            TypedExpr::Assignment { name, value, .. } => {
+                let r_value = value.emit(backend);
+
+                backend.build_store(name, r_value);
+
+                backend.const_void()
+            }
 
             TypedExpr::Binary {
                 left,

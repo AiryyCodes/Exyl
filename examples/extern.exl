@@ -1,7 +1,7 @@
 extern fun printf(format: string, ...): i32;
 
 fun main() {
-    let name = "Exyl";
+    add(1, 2);
 
     printf("Hello, %s!\n", name);
 }

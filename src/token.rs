@@ -1,3 +1,5 @@
+use crate::span::Span;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Symbols
@@ -47,4 +49,5 @@ pub enum TokenKind {
 pub struct Token {
     pub kind: TokenKind,
     pub lexeme: String,
+    pub span: Span,
 }

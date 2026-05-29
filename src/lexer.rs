@@ -1,9 +1,16 @@
-use crate::token::{Token, TokenKind};
+use crate::{
+    span::Span,
+    token::{Token, TokenKind},
+};
 
 pub struct Lexer {
     current: usize,
     start: usize,
     source: Vec<char>,
+
+    line: usize,
+    col: usize,
+    token_start_col: usize,
 }
 
 impl Lexer {
@@ -12,6 +19,9 @@ impl Lexer {
             current: 0,
             start: 0,
             source: source.chars().collect(),
+            line: 1,
+            col: 1,
+            token_start_col: 1,
         }
     }
 
@@ -20,6 +30,7 @@ impl Lexer {
 
         while !self.is_at_end() {
             self.start = self.current;
+            self.token_start_col = self.col;
 
             let c = self.advance();
 
@@ -106,7 +117,10 @@ impl Lexer {
                             self.advance(); // Consume the 3rd dot
                             self.add_token(&mut tokens, TokenKind::Ellipsis);
                         } else {
-                            panic!("Unexpected character: '.'");
+                            panic!(
+                                "Lexical Error: Unexpected character: '.' at line {}, col {}",
+                                self.line, self.col
+                            );
                         }
                     } else {
                         // self.add_token(&mut tokens, TokenKind::Dot);
@@ -125,16 +139,29 @@ impl Lexer {
                     self.analyze_number(&mut tokens);
                 }
 
-                // Skip whitespace
-                ' ' | '\t' | '\r' | '\n' => {}
+                // Skip whitespace but explicitly handle manual line updates
+                ' ' | '\t' | '\r' => {}
+                '\n' => {
+                    self.line += 1;
+                    self.col = 1;
+                }
 
-                _ => panic!("Uexpected character: '{c}'"),
+                _ => panic!(
+                    "Lexical Error: Unexpected character: '{c}' at line {}, col {}",
+                    self.line, self.col
+                ),
             }
         }
 
         tokens.push(Token {
             kind: TokenKind::EndOfFile,
             lexeme: "EOF".to_string(),
+            span: Span {
+                line: self.line,
+                col: self.col,
+                start: self.current,
+                end: self.current,
+            },
         });
 
         tokens
@@ -158,7 +185,16 @@ impl Lexer {
             _ => TokenKind::Identifier,
         };
 
-        tokens.push(Token { kind, lexeme: text });
+        tokens.push(Token {
+            kind,
+            lexeme: text,
+            span: Span {
+                line: self.line,
+                col: self.token_start_col,
+                start: self.start,
+                end: self.current,
+            },
+        });
     }
 
     fn analyze_number(&mut self, tokens: &mut Vec<Token>) {
@@ -171,36 +207,56 @@ impl Lexer {
         tokens.push(Token {
             kind: TokenKind::Number,
             lexeme: text,
+            span: Span {
+                line: self.line,
+                col: self.token_start_col,
+                start: self.start,
+                end: self.current,
+            },
         });
     }
 
     fn analyze_string(&mut self, tokens: &mut Vec<Token>) {
         let mut parsed_string = String::new();
+        let start_line = self.line;
 
         while !self.is_at_end() && self.peek() != '"' {
+            if self.peek() == '\n' {
+                self.line += 1;
+                self.col = 1;
+            }
+
             let c = self.advance();
 
             if c == '\\' {
                 if self.is_at_end() {
-                    panic!("Unterminated string escape sequence");
+                    panic!(
+                        "Lexical Error: Unterminated string escape sequence at line {}, col {}",
+                        self.line, self.col
+                    );
                 }
 
                 match self.advance() {
-                    'n' => parsed_string.push('\n'),  // Push a real newline byte
-                    't' => parsed_string.push('\t'),  // Push a real tab byte
-                    'r' => parsed_string.push('\r'),  // Push a real carriage return
-                    '\\' => parsed_string.push('\\'), // Push a single literal backslash
-                    '"' => parsed_string.push('"'),   // Push a literal embedded quote
-                    other => panic!("Unknown escape sequence: \\{}", other),
+                    'n' => parsed_string.push('\n'),
+                    't' => parsed_string.push('\t'),
+                    'r' => parsed_string.push('\r'),
+                    '\\' => parsed_string.push('\\'),
+                    '"' => parsed_string.push('"'),
+                    other => panic!(
+                        "Lexical Error: Unknown escape sequence: \\{} at line {}, col {}",
+                        other, self.line, self.col
+                    ),
                 }
             } else {
-                // Normal character, just append it
                 parsed_string.push(c);
             }
         }
 
         if self.is_at_end() {
-            panic!("Unterminated string");
+            panic!(
+                "Lexical Error: Unterminated string starting at line {}, col {}",
+                start_line, self.token_start_col
+            );
         }
 
         self.advance();
@@ -208,19 +264,35 @@ impl Lexer {
         tokens.push(Token {
             kind: TokenKind::String,
             lexeme: parsed_string,
+            span: Span {
+                line: start_line,
+                col: self.token_start_col,
+                start: self.start,
+                end: self.current,
+            },
         });
     }
 
     fn add_token(&mut self, tokens: &mut Vec<Token>, kind: TokenKind) {
         let text: String = self.source[self.start..self.current].iter().collect();
 
-        tokens.push(Token { kind, lexeme: text });
+        tokens.push(Token {
+            kind,
+            lexeme: text,
+            span: Span {
+                line: self.line,
+                col: self.token_start_col,
+                start: self.start,
+                end: self.current,
+            },
+        });
     }
 
     fn advance(&mut self) -> char {
         let c = self.source[self.current];
 
         self.current += 1;
+        self.col += 1;
 
         c
     }

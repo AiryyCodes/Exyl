@@ -512,4 +512,8 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
     fn const_bool(&self, val: bool) -> Self::Value {
         BasicValueEnum::IntValue(self.context.bool_type().const_int(val as u64, false))
     }
+
+    fn const_void(&self) -> Self::Value {
+        self.context.i32_type().const_zero().as_basic_value_enum()
+    }
 }

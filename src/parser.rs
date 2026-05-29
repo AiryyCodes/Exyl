@@ -1,6 +1,7 @@
 use crate::{
     ast::{Expr, Program, Stmt, TypeExpr},
     error::ParseError,
+    span::Span,
     token::{Token, TokenKind},
 };
 
@@ -58,11 +59,27 @@ impl Parser {
         !self.is_at_end() && self.peek().kind == kind
     }
 
-    fn consume(&mut self, kind: TokenKind, msg: &str) -> Result<Token, ParseError> {
-        if self.check(kind.clone()) {
+    fn consume_expected(
+        &mut self,
+        kind: TokenKind,
+        expected_description: &str,
+    ) -> Result<Token, ParseError> {
+        if self.check(kind) {
             Ok(self.advance())
         } else {
-            Err(self.error(msg))
+            let actual_token = self.peek().clone();
+            let msg = if actual_token.kind == TokenKind::EndOfFile {
+                format!(
+                    "Expected {}, but hit the End of File (EOF)",
+                    expected_description
+                )
+            } else {
+                format!(
+                    "Expected {}, but found '{}'",
+                    expected_description, actual_token.lexeme
+                )
+            };
+            Err(self.error_at(&actual_token, &msg))
         }
     }
 
@@ -101,25 +118,20 @@ impl Parser {
         }
     }
 
-    fn error(&self, message: &str) -> ParseError {
-        ParseError {
-            message: message.to_string(),
-        }
-    }
-
     fn error_at(&self, token: &Token, message: &str) -> ParseError {
         ParseError {
             message: format!("{} at '{}'", message, token.lexeme),
+            span: token.span,
         }
     }
 
     fn declaration(&mut self, is_extern: bool) -> Result<Stmt, ParseError> {
-        if self.match_token(TokenKind::Let) {
+        if self.check(TokenKind::Let) {
             if is_extern {
-                return Err(self.error(
-                    "Modifiers like 'extern' cannot be applied to 'let' declarations yet.",
-                ));
+                let token = self.peek().clone();
+                return Err(self.error_at(&token, "Syntax Error: 'extern' modifiers cannot be applied to 'let' variable bindings."));
             }
+            self.advance();
             return self.let_decl();
         }
 
@@ -128,15 +140,19 @@ impl Parser {
         }
 
         if self.match_token(TokenKind::Extern) {
-            // Prevent 'extern extern'
             if is_extern {
-                return Err(self.error("Duplicate 'extern' modifier"));
+                let token = self.previous();
+                return Err(self.error_at(
+                    &token,
+                    "Syntax Error: Duplicate 'extern' modifier encountered.",
+                ));
             }
             return self.declaration(true);
         }
 
         if is_extern {
-            return Err(self.error("Expected a declaration after 'extern'"));
+            let token = self.peek().clone();
+            return Err(self.error_at(&token, "Syntax Error: Expected a global top-level function declaration directly after 'extern'."));
         }
 
         self.statement()
@@ -160,53 +176,93 @@ impl Parser {
 
     fn expression_stmt(&mut self) -> Result<Stmt, ParseError> {
         let expr = self.expression()?;
-        self.consume(TokenKind::Semicolon, "Expected ';' after expression")?;
+        let semi = self.consume_expected(
+            TokenKind::Semicolon,
+            "a trailing ';' terminating the expression statement",
+        )?;
 
-        Ok(Stmt::Expr(expr))
+        let span = Span {
+            line: expr.span().line,
+            col: expr.span().col,
+            start: expr.span().start,
+            end: semi.span.end,
+        };
+
+        Ok(Stmt::Expr(expr, span))
     }
 
     fn let_decl(&mut self) -> Result<Stmt, ParseError> {
-        let name = self.consume(TokenKind::Identifier, "Expected variable name")?;
+        let let_token = self.previous();
+        let name = self.consume_expected(
+            TokenKind::Identifier,
+            "a variable name identifier following 'let'",
+        )?;
 
         let mut ty = None;
         if self.match_token(TokenKind::Colon) {
             ty = Some(self.type_expression()?);
         }
 
-        self.consume(TokenKind::Equal, "Expected '='")?;
-
+        self.consume_expected(
+            TokenKind::Equal,
+            "an assignment operator '=' following the variable name definition",
+        )?;
         let value = self.expression()?;
 
-        if !self.check(TokenKind::Semicolon) {
-            let token = self.peek().clone();
-            return Err(self.error_at(&token, "Expected ';' or operator"));
-        }
+        let semi = self.consume_expected(
+            TokenKind::Semicolon,
+            "a terminating ';' at the end of the variable declaration",
+        )?;
 
-        self.advance();
+        let span = Span {
+            line: let_token.span.line,
+            col: let_token.span.col,
+            start: let_token.span.start,
+            end: semi.span.end,
+        };
 
         Ok(Stmt::Let {
             name: name.lexeme,
             ty,
             value,
+            span,
         })
     }
 
     fn return_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let ret_token = self.previous();
         let mut value = None;
 
         if !self.check(TokenKind::Semicolon) {
             value = Some(self.expression()?);
         }
 
-        self.consume(TokenKind::Semicolon, "Expected ';' after return value")?;
+        let semi = self.consume_expected(
+            TokenKind::Semicolon,
+            "a terminating ';' directly following your return value statement",
+        )?;
 
-        Ok(Stmt::Return { value })
+        let span = Span {
+            line: ret_token.span.line,
+            col: ret_token.span.col,
+            start: ret_token.span.start,
+            end: semi.span.end,
+        };
+
+        Ok(Stmt::Return { value, span })
     }
 
     fn fun_decl(&mut self, is_extern: bool) -> Result<Stmt, ParseError> {
-        let name = self.consume(TokenKind::Identifier, "Expected function name")?;
+        let fun_token = self.previous();
+        let name = self.consume_expected(
+            TokenKind::Identifier,
+            "a function name identifier following 'fun'",
+        )?;
 
-        self.consume(TokenKind::LeftParen, "Expected '('")?;
+        self.consume_expected(
+            TokenKind::LeftParen,
+            "an opening '(' before defining function arguments",
+        )?;
 
         let mut params = vec![];
         let mut is_variadic = false;
@@ -216,18 +272,19 @@ impl Parser {
                 if self.match_token(TokenKind::Ellipsis) {
                     is_variadic = true;
 
-                    // Variadics must be the last item. If a comma follows, it's a syntax error.
                     if self.check(TokenKind::Comma) {
-                        return Err(self.error("Variadic parameter must be the last parameter"));
+                        let token = self.peek().clone();
+                        return Err(self.error_at(&token, "Syntax Error: A variadic parameter (...) must be the final entry in a parameter signature."));
                     }
-
                     break;
                 }
 
-                let param_name = self.consume(TokenKind::Identifier, "Expected parameter name")?;
-
-                self.consume(TokenKind::Colon, "Expected ':' after parameter name")?;
-
+                let param_name =
+                    self.consume_expected(TokenKind::Identifier, "a parameter name declaration")?;
+                self.consume_expected(
+                    TokenKind::Colon,
+                    "a type annotation separator ':' directly following the parameter name",
+                )?;
                 let param_type = self.type_expression()?;
 
                 params.push((param_name.lexeme, param_type));
@@ -238,7 +295,10 @@ impl Parser {
             }
         }
 
-        self.consume(TokenKind::RightParen, "Expected ')'")?;
+        self.consume_expected(
+            TokenKind::RightParen,
+            "a closing ')' directly after the formal parameter list specifications",
+        )?;
 
         let mut return_type = None;
         if self.match_token(TokenKind::Colon) {
@@ -246,14 +306,26 @@ impl Parser {
         }
 
         let mut body = None;
+        let end_offset;
+
         if !is_extern {
-            body = Some(Box::new(self.block()?));
+            let block_node = self.block()?;
+            end_offset = block_node.span().end;
+            body = Some(Box::new(block_node));
         } else {
-            self.consume(
+            let semi = self.consume_expected(
                 TokenKind::Semicolon,
-                "Expected ';' after extern declaration",
+                "a terminating ';' directly after an 'extern' function signature prototype",
             )?;
+            end_offset = semi.span.end;
         }
+
+        let span = Span {
+            line: fun_token.span.line,
+            col: fun_token.span.col,
+            start: fun_token.span.start,
+            end: end_offset,
+        };
 
         Ok(Stmt::Fun {
             name: name.lexeme,
@@ -261,31 +333,41 @@ impl Parser {
             is_variadic,
             return_type,
             is_extern,
-            body: body,
+            body,
+            span,
         })
     }
 
     fn block(&mut self) -> Result<Stmt, ParseError> {
-        self.consume(TokenKind::LeftBracket, "Expected '{'")?;
+        let open_bracket =
+            self.consume_expected(TokenKind::LeftBracket, "an opening block delimiter '{'")?;
 
         let mut body = vec![];
         while !self.is_at_end() && !self.check(TokenKind::RightBracket) {
-            // May need to check for extern keyword
             body.push(self.declaration(false)?);
         }
 
-        self.consume(TokenKind::RightBracket, "Expected '}'")?;
+        let close_bracket = self.consume_expected(
+            TokenKind::RightBracket,
+            "a closing block brace structure completion '}'",
+        )?;
 
-        Ok(Stmt::Block(body))
+        let span = Span {
+            line: open_bracket.span.line,
+            col: open_bracket.span.col,
+            start: open_bracket.span.start,
+            end: close_bracket.span.end,
+        };
+
+        Ok(Stmt::Block(body, span))
     }
 
     fn type_expression(&mut self) -> Result<TypeExpr, ParseError> {
-        let token = self.consume(TokenKind::Identifier, "Expected type name")?;
-        let current_type = TypeExpr::Primitive(token.lexeme);
-
-        // TODO: add support for union types, and more.
-
-        Ok(current_type)
+        let token = self.consume_expected(
+            TokenKind::Identifier,
+            "a primitive valid data type identifier name (e.g., 'i32', 'string')",
+        )?;
+        Ok(TypeExpr::Primitive(token.lexeme, token.span))
     }
 
     fn call(&mut self) -> Result<Expr, ParseError> {
@@ -296,7 +378,12 @@ impl Parser {
 
             if !self.check(TokenKind::RightParen) {
                 loop {
-                    arguments.push(self.expression()?);
+                    match self.expression() {
+                        Ok(arg) => arguments.push(arg),
+                        Err(e) => {
+                            return Err(self.error_at(&self.peek().clone(), &format!("Malformed argument item evaluation inside target call bounds: {}", e.message)));
+                        }
+                    }
 
                     if !self.match_token(TokenKind::Comma) {
                         break;
@@ -304,12 +391,23 @@ impl Parser {
                 }
             }
 
-            self.consume(TokenKind::RightParen, "Expected ')' after arguments")?;
+            let right_paren = self.consume_expected(
+                TokenKind::RightParen,
+                "a closing function application call bracket match group ')'",
+            )?;
+
+            let span = Span {
+                line: expr.span().line,
+                col: expr.span().col,
+                start: expr.span().start,
+                end: right_paren.span.end,
+            };
 
             expr = Expr::Call {
                 callee: Box::new(expr),
                 arguments,
-            }
+                span,
+            };
         }
 
         Ok(expr)
@@ -323,15 +421,21 @@ impl Parser {
             let value = self.assignment()?;
 
             match expr {
-                Expr::Identifier(name) => {
-                    return Ok(Expr::Binary {
-                        left: Box::new(Expr::Identifier(name)),
-                        operator: equals,
-                        right: Box::new(value),
+                Expr::Identifier(name, id_span) => {
+                    let span = Span {
+                        line: id_span.line,
+                        col: id_span.col,
+                        start: id_span.start,
+                        end: value.span().end,
+                    };
+                    return Ok(Expr::Assignment {
+                        name,
+                        value: Box::new(value),
+                        span,
                     });
                 }
                 _ => {
-                    return Err(self.error_at(&equals, "Invalid assignment target"));
+                    return Err(self.error_at(&equals, &format!("Syntax Error: Assignment target must be a mutable identifier variable name, found unexpected target: {:?}", expr)));
                 }
             }
         }
@@ -346,10 +450,18 @@ impl Parser {
             let operator = self.previous();
             let right = self.comparison()?;
 
+            let span = Span {
+                line: expr.span().line,
+                col: expr.span().col,
+                start: expr.span().start,
+                end: right.span().end,
+            };
+
             expr = Expr::Binary {
                 left: Box::new(expr),
                 operator,
                 right: Box::new(right),
+                span,
             };
         }
 
@@ -367,10 +479,18 @@ impl Parser {
             let operator = self.previous();
             let right = self.term()?;
 
+            let span = Span {
+                line: expr.span().line,
+                col: expr.span().col,
+                start: expr.span().start,
+                end: right.span().end,
+            };
+
             expr = Expr::Binary {
                 left: Box::new(expr),
                 operator,
                 right: Box::new(right),
+                span,
             };
         }
 
@@ -384,10 +504,18 @@ impl Parser {
             let operator = self.previous();
             let right = self.factor()?;
 
+            let span = Span {
+                line: expr.span().line,
+                col: expr.span().col,
+                start: expr.span().start,
+                end: right.span().end,
+            };
+
             expr = Expr::Binary {
                 left: Box::new(expr),
                 operator,
                 right: Box::new(right),
+                span,
             };
         }
 
@@ -401,10 +529,18 @@ impl Parser {
             let operator = self.previous();
             let right = self.unary()?;
 
+            let span = Span {
+                line: expr.span().line,
+                col: expr.span().col,
+                start: expr.span().start,
+                end: right.span().end,
+            };
+
             expr = Expr::Binary {
                 left: Box::new(expr),
                 operator,
                 right: Box::new(right),
+                span,
             };
         }
 
@@ -416,9 +552,17 @@ impl Parser {
             let operator = self.previous();
             let right = self.unary()?;
 
+            let span = Span {
+                line: operator.span.line,
+                col: operator.span.col,
+                start: operator.span.start,
+                end: right.span().end,
+            };
+
             return Ok(Expr::Unary {
                 operator,
                 right: Box::new(right),
+                span,
             });
         }
 
@@ -429,22 +573,50 @@ impl Parser {
         let token = self.advance();
 
         match token.kind {
-            TokenKind::Number => Ok(Expr::Number(token.lexeme.parse().unwrap())),
-            TokenKind::String => Ok(Expr::String(token.lexeme)),
-            TokenKind::True => Ok(Expr::Bool(token.lexeme.parse().unwrap())),
-            TokenKind::False => Ok(Expr::Bool(token.lexeme.parse().unwrap())),
-            TokenKind::Identifier => Ok(Expr::Identifier(token.lexeme)),
+            TokenKind::Number => {
+                let val = token.lexeme.parse::<f64>().map_err(|_| {
+                    self.error_at(&token, "Compiler Core Error: Malformed or out-of-bounds float literal representation.")
+                })?;
+                Ok(Expr::Number(val, token.span))
+            }
+            TokenKind::String => Ok(Expr::String(token.lexeme, token.span)),
+            TokenKind::True => Ok(Expr::Bool(true, token.span)),
+            TokenKind::False => Ok(Expr::Bool(false, token.span)),
+            TokenKind::Identifier => Ok(Expr::Identifier(token.lexeme, token.span)),
 
             TokenKind::LeftParen => {
                 let expr = self.expression()?;
-                self.consume(TokenKind::RightParen, "Expected ')' after expression")?;
-                Ok(expr)
+                let right_paren = self.consume_expected(TokenKind::RightParen, "a corresponding matching grouping close symbol ')'")?;
+                
+                let span = Span {
+                    line: token.span.line,
+                    col: token.span.col,
+                    start: token.span.start,
+                    end: right_paren.span.end,
+                };
+                
+                let updated_expr = match expr {
+                    Expr::Number(v, _) => Expr::Number(v, span),
+                    Expr::String(s, _) => Expr::String(s, span),
+                    Expr::Bool(b, _) => Expr::Bool(b, span),
+                    Expr::Identifier(i, _) => Expr::Identifier(i, span),
+                    Expr::Call { callee, arguments, .. } => Expr::Call { callee, arguments, span },
+                    Expr::Assignment { name, value, .. } => Expr::Assignment { name, value, span },
+                    Expr::Error(e, _) => Expr::Error(e, span),
+                    Expr::Binary { left, right, operator, .. } => Expr::Binary { left, right, operator, span },
+                    Expr::Unary { operator, right, .. } => Expr::Unary { operator, right, span },
+                };
+
+                Ok(updated_expr)
             }
 
-            TokenKind::Equal => Err(self.error_at(&token, "Unexpected '=' in expression")),
-            TokenKind::Bang => Err(self.error_at(&token, "Unexpected '!' in expression")),
+            TokenKind::Equal | TokenKind::Bang => {
+                Err(self.error_at(&token, &format!("Syntax Error: Leading mathematical logic operator '{}' cannot begin an evaluation expression.", token.lexeme)))
+            }
 
-            _ => Err(self.error_at(&token, "Unexpected token in expression")),
+            _ => {
+                Err(self.error_at(&token, &format!("Syntax Error: Expected an expression value, literal baseline, or bracket block grouping structure here but encountered '{}'.", token.lexeme)))
+            }
         }
     }
 }
