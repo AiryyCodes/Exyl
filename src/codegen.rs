@@ -7,6 +7,8 @@ pub trait BuilderBackend {
 
     fn is_block_terminated(&self) -> bool;
 
+    fn get_variable_ptr(&self, name: &str) -> Self::Value;
+
     // Control flow
     fn append_basic_block(&self, name: &str) -> Self::BasicBlock;
     fn position_at_end(&self, block: &Self::BasicBlock);

@@ -66,7 +66,9 @@ pub enum Expr {
     Number(f64, Span),
     String(String, Span),
     Bool(bool, Span),
+
     Identifier(String, Span),
+
     Call {
         callee: Box<Expr>,
         arguments: Vec<Expr>,
@@ -89,6 +91,8 @@ pub enum Expr {
         right: Box<Expr>,
         span: Span,
     },
+
+    AddressOf(Box<Expr>, Span),
 }
 
 impl Expr {
@@ -103,6 +107,7 @@ impl Expr {
             Expr::Error(_, span) => *span,
             Expr::Binary { span, .. } => *span,
             Expr::Unary { span, .. } => *span,
+            Expr::AddressOf(_, span) => *span,
         }
     }
 }

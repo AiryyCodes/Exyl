@@ -3,7 +3,7 @@ use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValue, BasicValueEnum, PointerValue};
-use inkwell::{FloatPredicate, IntPredicate};
+use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use std::collections::HashMap;
 
 use crate::codegen::BuilderBackend;
@@ -48,6 +48,11 @@ impl<'ctx> LlvmGenerator<'ctx> {
                     .as_basic_type_enum()
             }
             Type::Void => panic!("Void type cannot represent raw values."),
+
+            Type::Ref(_) => self
+                .context
+                .ptr_type(AddressSpace::from(0))
+                .as_basic_type_enum(),
         }
     }
 }
@@ -62,6 +67,13 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
             .get_insert_block()
             .and_then(|b| b.get_terminator())
             .is_some()
+    }
+
+    fn get_variable_ptr(&self, name: &str) -> Self::Value {
+        self.named_values
+            .get(name)
+            .unwrap_or_else(|| panic!("Undefined variable: {}", name))
+            .as_basic_value_enum()
     }
 
     fn append_basic_block(&self, name: &str) -> Self::BasicBlock {

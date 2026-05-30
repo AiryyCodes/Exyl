@@ -18,6 +18,8 @@ pub enum Type {
     Bool,
     String,
     Void,
+
+    Ref(Box<Type>),
 }
 
 impl Type {
@@ -239,6 +241,7 @@ pub enum TypedExpr {
         right: Box<TypedExpr>,
         ty: Type,
     },
+    AddressOf(Box<TypedExpr>, Type),
 }
 
 impl TypedExpr {
@@ -253,6 +256,8 @@ impl TypedExpr {
 
             TypedExpr::String(_) => Type::String,
             TypedExpr::Bool(_) => Type::Bool,
+
+            TypedExpr::AddressOf(_, ty) => ty.clone(),
         }
     }
 }
@@ -326,6 +331,13 @@ impl<B: BuilderBackend> Emit<B> for TypedExpr {
 
                 backend.build_call(name, args_compiled, return_type)
             }
+            TypedExpr::AddressOf(inner, _) => match inner.as_ref() {
+                TypedExpr::Identifier(name, ..) => {
+                    let ptr = backend.get_variable_ptr(name);
+                    ptr
+                }
+                _ => panic!("AddressOf only supported on identifiers for now"),
+            },
         }
     }
 }

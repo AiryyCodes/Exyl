@@ -614,6 +614,20 @@ impl Parser {
     }
 
     fn unary(&mut self) -> Result<Expr, ParseError> {
+        if self.match_token(TokenKind::Ampersand) {
+            let operator = self.previous();
+            let right = self.unary()?;
+            
+            let span = Span {
+        line: operator.span.line,
+        col: operator.span.col,
+        start: operator.span.start, 
+        end: right.span().end,
+    };
+
+            return Ok(Expr::AddressOf(Box::new(right), span))
+        }
+
         if self.match_token(TokenKind::Minus) || self.match_token(TokenKind::Bang) {
             let operator = self.previous();
             let right = self.unary()?;
@@ -671,6 +685,7 @@ impl Parser {
                     Expr::Error(e, _) => Expr::Error(e, span),
                     Expr::Binary { left, right, operator, .. } => Expr::Binary { left, right, operator, span },
                     Expr::Unary { operator, right, .. } => Expr::Unary { operator, right, span },
+                    Expr::AddressOf(inner, _) => Expr::AddressOf(inner, span),
                 };
 
                 Ok(updated_expr)

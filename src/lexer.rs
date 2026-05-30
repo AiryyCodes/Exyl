@@ -131,6 +131,8 @@ impl Lexer {
                     self.analyze_string(&mut tokens);
                 }
 
+                '&' => self.add_token(&mut tokens, TokenKind::Ampersand),
+
                 c if self.is_alpha(c) => {
                     self.analyze_identifier(&mut tokens);
                 }

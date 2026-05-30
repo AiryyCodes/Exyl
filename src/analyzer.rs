@@ -514,6 +514,12 @@ impl SemanticAnalyzer {
             }
 
             Expr::Error(msg, span) => Err(self.record_error(format!("Parser Fallback Error: {}", msg), span.clone())),
+
+            Expr::AddressOf(inner, _) => {
+                let typed_inner = self.expression(inner, None)?;
+                let inner_type = typed_inner.get_type().clone();
+                Ok(TypedExpr::AddressOf(Box::new(typed_inner), Type::Ref(Box::new(inner_type))))
+            }
         }
     }
 

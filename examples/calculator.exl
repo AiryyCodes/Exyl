@@ -1,0 +1,34 @@
+extern fun printf(fmt: string, ...): void;
+extern fun scanf(fmt: string, ...): void;
+extern fun strcmp(a: string, b: string): i32;
+
+fun main(): i32 {
+    let a = 0;
+    let b = 0;
+    let op = 0;
+
+    printf("Enter a: ");
+    scanf("%d", &a);
+
+    printf("Enter b: ");
+    scanf("%d", &b);
+
+    printf("Enter operator: ");
+    scanf(" %c", &op);
+
+    let result = 0;
+    if op == 43 {
+        result = a + b;
+    } else if op == 45 {
+        result = a - b;
+    } else if op == 42 {
+        result = a * b;
+    } else {
+        printf("Invalid operator: %s\n", op);
+        return 0;
+    }
+
+    printf("Result: %d\n", result);
+
+    return 0;
+}

@@ -125,6 +125,8 @@ fn compile(raw_program: &Program, source: &str, args: &Args) -> Result<(), Strin
         std::process::exit(1);
     }
 
+    backend.module.print_to_stderr();
+
     Target::initialize_native(&InitializationConfig::default()).map_err(|e| {
         format!(
             "LLVM Backend Error: Target Initialization routine failed: {}",
