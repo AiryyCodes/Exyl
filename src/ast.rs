@@ -132,6 +132,20 @@ pub enum Expr {
         arguments: Vec<Expr>,
         span: Span,
     },
+
+    // Arrays
+    ArrayLiteral(Vec<Expr>, Span),
+    Index {
+        object: Box<Expr>,
+        index: Box<Expr>,
+        span: Span,
+    },
+    IndexAssignment {
+        object: Box<Expr>,
+        index: Box<Expr>,
+        value: Box<Expr>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -153,6 +167,10 @@ impl Expr {
             Expr::FieldAssignment { span, .. } => *span,
             Expr::StructLiteral { span, .. } => *span,
             Expr::StaticCall { span, .. } => *span,
+
+            Expr::ArrayLiteral(_, span) => *span,
+            Expr::Index { span, .. } => *span,
+            Expr::IndexAssignment { span, .. } => *span,
         }
     }
 }
@@ -160,8 +178,9 @@ impl Expr {
 #[derive(Debug, Clone)]
 pub enum TypeExpr {
     Primitive(String, Span),
-
     Named(String, Span),
+
+    Array(Box<TypeExpr>, usize, Span),
 }
 
 impl TypeExpr {
@@ -169,6 +188,8 @@ impl TypeExpr {
         match self {
             TypeExpr::Primitive(_, span) => *span,
             TypeExpr::Named(_, span) => *span,
+
+            TypeExpr::Array(_, _, span) => *span,
         }
     }
 }

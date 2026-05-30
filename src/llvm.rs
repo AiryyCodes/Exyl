@@ -63,6 +63,11 @@ impl<'ctx> LlvmGenerator<'ctx> {
                     .struct_type(&field_types, false)
                     .as_basic_type_enum()
             }
+
+            Type::Array(elem, size) => {
+                let elem_llvm = self.get_llvm_type(elem);
+                elem_llvm.array_type(*size as u32).as_basic_type_enum()
+            }
         }
     }
 }
@@ -629,6 +634,43 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
                     .expect("Error: Failed to emit void return instruction.");
             }
         }
+    }
+
+    fn build_array_literal(&mut self, elements: Vec<Self::Value>, ty: &Type) -> Self::Value {
+        let llvm_array_type = self.get_llvm_type(ty).into_array_type();
+        let alloca = self.builder.build_alloca(llvm_array_type, "arr").unwrap();
+
+        let i64_type = self.context.i64_type();
+        let zero = i64_type.const_int(0, false);
+
+        for (i, val) in elements.iter().enumerate() {
+            let idx = i64_type.const_int(i as u64, false);
+            let gep = unsafe {
+                self.builder
+                    .build_gep(llvm_array_type, alloca, &[zero, idx], "arr_elem_ptr")
+                    .unwrap()
+            };
+            self.builder.build_store(gep, *val).unwrap();
+        }
+
+        self.builder
+            .build_load(llvm_array_type, alloca, "arr")
+            .unwrap()
+    }
+
+    fn build_array_gep(&self, ptr: Self::Value, index: Self::Value, elem_ty: &Type) -> Self::Value {
+        let elem_llvm = self.get_llvm_type(elem_ty);
+        let gep = unsafe {
+            self.builder
+                .build_gep(
+                    elem_llvm,
+                    ptr.into_pointer_value(),
+                    &[index.into_int_value()],
+                    "elem_ptr",
+                )
+                .unwrap()
+        };
+        gep.as_basic_value_enum()
     }
 
     fn const_number(&self, val: f64, ty: &Type) -> Self::Value {

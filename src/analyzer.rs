@@ -883,6 +883,73 @@ impl SemanticAnalyzer {
                     )),
                 }
             }
+
+            Expr::ArrayLiteral(elements, _) => {
+                let elem_hint = match expected {
+                    Some(Type::Array(elem_ty, _)) => Some(elem_ty.as_ref()),
+                    _ => None,
+                };
+                let mut typed_elems = vec![];
+                for e in elements {
+                    typed_elems.push(self.expression(e, elem_hint)?);
+                }
+                let elem_ty = typed_elems.first()
+                    .map(|e| e.get_type())
+                    .unwrap_or(Type::I32);
+                let len = typed_elems.len();
+                Ok(TypedExpr::ArrayLiteral {
+                    elements: typed_elems,
+                    ty: Type::Array(Box::new(elem_ty), len),
+                })
+            }
+
+            Expr::Index { object, index, span } => {
+                let typed_obj = self.expression(object, None)?;
+                let typed_idx = self.expression(index, Some(&Type::I64))?;
+                match typed_obj.get_type() {
+                    Type::Array(elem_ty, _) => Ok(TypedExpr::Index {
+                        object: Box::new(typed_obj),
+                        index: Box::new(typed_idx),
+                        ty: *elem_ty,
+                    }),
+                    other => Err(self.record_error(
+                        format!("Type Error: Cannot index into {:?}", other),
+                        *span,
+                    )),
+                }
+            }
+
+            Expr::IndexAssignment { object, index, value, span } => {
+                let typed_obj = self.expression(object, None)?;
+                let elem_ty = match typed_obj.get_type() {
+                    Type::Array(elem_ty, _) => *elem_ty,
+                    other => return Err(self.record_error(
+                        format!("Type Error: Cannot index into {:?}", other),
+                        *span,
+                    )),
+                };
+                let typed_idx = self.expression(index, Some(&Type::I64))?;
+                let typed_val = self.expression(value, Some(&elem_ty))?;
+                if !typed_val.get_type().is_assignable_to(&elem_ty) {
+                    return Err(self.record_error(
+                        format!("Type Error: Cannot assign {:?} to array of {:?}", typed_val.get_type(), elem_ty),
+                        *span,
+                    ));
+                }
+                let object_name = match object.as_ref() {
+                    Expr::Identifier(name, _) => name.clone(),
+                    _ => return Err(self.record_error(
+                        "Index assignment only supported on direct variables for now.".to_string(),
+                        *span,
+                    )),
+                };
+                Ok(TypedExpr::IndexAssignment {
+                    object_name,
+                    index: Box::new(typed_idx),
+                    value: Box::new(typed_val),
+                    elem_ty,
+                })
+            }
         }
     }
 
@@ -972,6 +1039,11 @@ impl SemanticAnalyzer {
                         message: format!("Type Error: Unknown type '{}'", name),
                         span: *span,
                     })
+            },
+
+            TypeExpr::Array(elem, size, _) => {
+                let elem_ty = self.try_resolve_type_expression(elem)?;
+                Ok(Type::Array(Box::new(elem_ty), *size))
             }
         }
     }

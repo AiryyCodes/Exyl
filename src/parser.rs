@@ -540,6 +540,31 @@ impl Parser {
     }
 
     fn type_expression(&mut self) -> Result<TypeExpr, ParseError> {
+        if self.match_token(TokenKind::LeftBracket) {
+            let bracket_token = self.previous();
+
+            let size_tok = self.consume_expected(
+                TokenKind::Number,
+                "an array size (e.g. '4')",
+            )?;
+            let size = size_tok.lexeme.parse::<usize>().map_err(|_| {
+                self.error_at(&size_tok, "Array size must be a positive integer")
+            })?;
+
+            self.consume_expected(TokenKind::RightBracket, "a closing ']' after array size")?;
+
+            let elem_type = self.type_expression()?; // recursive — handles [4][4]f32 too
+
+            let span = Span {
+                line: bracket_token.span.line,
+                col: bracket_token.span.col,
+                start: bracket_token.span.start,
+                end: elem_type.span().end,
+            };
+
+            return Ok(TypeExpr::Array(Box::new(elem_type), size, span));
+        }
+
         let token = self.consume_expected(
             TokenKind::Identifier,
             "a type name (e.g. 'i32', 'Vec2')",
@@ -612,6 +637,16 @@ impl Parser {
                     span: access_span,
                 };
 
+            } else if self.match_token(TokenKind::LeftBracket) {
+                let index = self.expression()?;
+                let close = self.consume_expected(TokenKind::RightBracket, "']'")?;
+                let span = Span {
+                    line: expr.span().line,
+                    col: expr.span().col,
+                    start: expr.span().start,
+                    end: close.span.end,
+                };
+                expr = Expr::Index { object: Box::new(expr), index: Box::new(index), span };
             } else {
                 break;
             }
@@ -656,6 +691,22 @@ impl Parser {
                         span,
                     });
                 },
+
+                Expr::Index { object, index, span: idx_span } => {
+                    let span = Span {
+                        line: idx_span.line,
+                        col: idx_span.col,
+                        start: idx_span.start,
+                        end: value.span().end,
+                    };
+
+                    return Ok(Expr::IndexAssignment {
+                        object,
+                        index,
+                        value: Box::new(value),
+                        span,
+                    });
+                }
 
                 _ => {
                     return Err(self.error_at(&equals, &format!("Syntax Error: Assignment target must be a mutable identifier variable name, found unexpected target: {:?}", expr)));
@@ -976,10 +1027,32 @@ impl Parser {
                     Expr::FieldAssignment { object, field, value, span } => Expr::FieldAssignment { object, field, value, span },
                     Expr::StructLiteral { name, fields, .. } => Expr::StructLiteral { name, fields, span },
                     Expr::StaticCall { type_name, method, arguments, span } => Expr::StaticCall { type_name, method, arguments, span },
+
+                    Expr::ArrayLiteral(elements, _) => Expr::ArrayLiteral(elements, span),
+                    Expr::Index { object, index, .. } => Expr::Index { object, index, span },
+                    Expr::IndexAssignment { object, index, value, .. } => Expr::IndexAssignment { object, index, value, span },
                 };
 
                 Ok(updated_expr)
             }
+
+            TokenKind::LeftBracket => {
+            let mut elements = vec![];
+            while !self.check(TokenKind::RightBracket) {
+                elements.push(self.expression()?);
+                if !self.match_token(TokenKind::Comma) { break; }
+            }
+            let close = self.consume_expected(TokenKind::RightBracket, "']'")?;
+            
+            let span = Span {
+                line: token.span.line,
+                col: token.span.col,
+                start: token.span.start,
+                end: close.span.end,
+            };
+
+            Ok(Expr::ArrayLiteral(elements, span))
+        }
 
             TokenKind::Equal | TokenKind::Bang => {
                 Err(self.error_at(&token, &format!("Syntax Error: Leading mathematical logic operator '{}' cannot begin an evaluation expression.", token.lexeme)))

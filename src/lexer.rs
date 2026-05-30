@@ -112,6 +112,8 @@ impl Lexer {
                 ')' => self.add_token(&mut tokens, TokenKind::RightParen),
                 '{' => self.add_token(&mut tokens, TokenKind::LeftBrace),
                 '}' => self.add_token(&mut tokens, TokenKind::RightBrace),
+                '[' => self.add_token(&mut tokens, TokenKind::LeftBracket),
+                ']' => self.add_token(&mut tokens, TokenKind::RightBracket),
 
                 ':' => {
                     if self.peek() == ':' {

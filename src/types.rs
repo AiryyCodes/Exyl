@@ -26,6 +26,8 @@ pub enum Type {
         name: String,
         fields: Vec<(String, Type)>,
     },
+
+    Array(Box<Type>, usize),
 }
 
 impl Type {
@@ -324,6 +326,23 @@ pub enum TypedExpr {
         arguments: Vec<TypedExpr>,
         return_type: Type,
     },
+
+    // Arrays
+    ArrayLiteral {
+        elements: Vec<TypedExpr>,
+        ty: Type,
+    },
+    Index {
+        object: Box<TypedExpr>,
+        index: Box<TypedExpr>,
+        ty: Type,
+    },
+    IndexAssignment {
+        object_name: String,
+        index: Box<TypedExpr>,
+        value: Box<TypedExpr>,
+        elem_ty: Type,
+    },
 }
 
 impl TypedExpr {
@@ -349,6 +368,10 @@ impl TypedExpr {
             TypedExpr::StructLiteralPositional { ty, .. } => ty.clone(),
             TypedExpr::StaticCall { return_type, .. } => return_type.clone(),
             TypedExpr::MethodCall { return_type, .. } => return_type.clone(),
+
+            TypedExpr::ArrayLiteral { ty, .. } => ty.clone(),
+            TypedExpr::Index { ty, .. } => ty.clone(),
+            TypedExpr::IndexAssignment { .. } => Type::Void,
         }
     }
 }
@@ -538,6 +561,39 @@ impl<B: BuilderBackend> Emit<B> for TypedExpr {
                 let mut args = vec![self_ptr];
                 args.extend(arguments.iter().map(|a| a.emit(backend)));
                 backend.build_call(mangled_name, args, return_type)
+            }
+
+            TypedExpr::ArrayLiteral { elements, ty } => {
+                let field_values: Vec<B::Value> =
+                    elements.iter().map(|e| e.emit(backend)).collect();
+                backend.build_array_literal(field_values, ty)
+            }
+
+            TypedExpr::Index { object, index, ty } => {
+                let arr_ptr = match object.as_ref() {
+                    TypedExpr::Identifier(name, _) => backend.get_variable_ptr(name),
+                    _ => {
+                        let v = object.emit(backend);
+                        backend.build_temp_alloca(v, &object.get_type())
+                    }
+                };
+                let idx = index.emit(backend);
+                let elem_ptr = backend.build_array_gep(arr_ptr, idx, ty);
+                backend.build_load_ptr(elem_ptr, ty)
+            }
+
+            TypedExpr::IndexAssignment {
+                object_name,
+                index,
+                value,
+                elem_ty,
+            } => {
+                let arr_ptr = backend.get_variable_ptr(object_name);
+                let idx = index.emit(backend);
+                let elem_ptr = backend.build_array_gep(arr_ptr, idx, elem_ty);
+                let val = value.emit(backend);
+                backend.build_store_ptr(elem_ptr, val);
+                backend.const_void()
             }
         }
     }
