@@ -673,6 +673,107 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
         gep.as_basic_value_enum()
     }
 
+    fn build_cast(&self, val: Self::Value, from: &Type, to: &Type) -> Self::Value {
+        let to_llvm = self.get_llvm_type(to);
+
+        match (from, to) {
+            // int to int — resize
+            (a, b) if a.is_integer() && b.is_integer() => {
+                let to_int = to_llvm.into_int_type();
+                let from_bits = val.into_int_value().get_type().get_bit_width();
+                let to_bits = to_int.get_bit_width();
+                if to_bits > from_bits {
+                    self.builder
+                        .build_int_z_extend(val.into_int_value(), to_int, "zext")
+                        .unwrap()
+                        .as_basic_value_enum()
+                } else if to_bits < from_bits {
+                    self.builder
+                        .build_int_truncate(val.into_int_value(), to_int, "trunc")
+                        .unwrap()
+                        .as_basic_value_enum()
+                } else {
+                    val // same size, no-op
+                }
+            }
+            // float to float
+            (a, b) if a.is_float() && b.is_float() => self
+                .builder
+                .build_float_cast(val.into_float_value(), to_llvm.into_float_type(), "fcast")
+                .unwrap()
+                .as_basic_value_enum(),
+            // int to float
+            (a, b) if a.is_integer() && b.is_float() => {
+                if a.is_signed_integer() {
+                    self.builder
+                        .build_signed_int_to_float(
+                            val.into_int_value(),
+                            to_llvm.into_float_type(),
+                            "sitofp",
+                        )
+                        .unwrap()
+                        .as_basic_value_enum()
+                } else {
+                    self.builder
+                        .build_unsigned_int_to_float(
+                            val.into_int_value(),
+                            to_llvm.into_float_type(),
+                            "uitofp",
+                        )
+                        .unwrap()
+                        .as_basic_value_enum()
+                }
+            }
+            // float to int
+            (a, b) if a.is_float() && b.is_integer() => {
+                if b.is_signed_integer() {
+                    self.builder
+                        .build_float_to_signed_int(
+                            val.into_float_value(),
+                            to_llvm.into_int_type(),
+                            "fptosi",
+                        )
+                        .unwrap()
+                        .as_basic_value_enum()
+                } else {
+                    self.builder
+                        .build_float_to_unsigned_int(
+                            val.into_float_value(),
+                            to_llvm.into_int_type(),
+                            "fptoui",
+                        )
+                        .unwrap()
+                        .as_basic_value_enum()
+                }
+            }
+            // int to pointer
+            (a, Type::Ref(_)) if a.is_integer() => self
+                .builder
+                .build_int_to_ptr(
+                    val.into_int_value(),
+                    self.context.ptr_type(AddressSpace::from(0)),
+                    "inttoptr",
+                )
+                .unwrap()
+                .as_basic_value_enum(),
+            // pointer to int
+            (Type::Ref(_), b) if b.is_integer() => self
+                .builder
+                .build_ptr_to_int(
+                    val.into_pointer_value(),
+                    to_llvm.into_int_type(),
+                    "ptrtoint",
+                )
+                .unwrap()
+                .as_basic_value_enum(),
+            // pointer to pointer (bitcast)
+            (Type::Ref(_), Type::Ref(_)) => {
+                val // opaque pointers in LLVM 15+ — all ptrs are the same type
+            }
+            _ => panic!("Unsupported cast from {:?} to {:?}", from, to),
+        }
+    }
+
     fn const_number(&self, val: f64, ty: &Type) -> Self::Value {
         if ty.is_float() {
             let float_type = self.get_llvm_type(ty).into_float_type();

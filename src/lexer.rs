@@ -229,6 +229,7 @@ impl Lexer {
             "struct" => TokenKind::Struct,
             "impl" => TokenKind::Impl,
             "self" => TokenKind::SelfKw,
+            "as" => TokenKind::As,
             _ => TokenKind::Identifier,
         };
 

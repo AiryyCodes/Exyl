@@ -1,7 +1,7 @@
 extern fun printf(fmt: string, ...): i32;
 
 fun ptr_test(ptr: *i32) {
-    printf("Value: %d\n", *ptr);
+    printf("Value: %f\n", *ptr as f64);
 }
 
 fun main(): i32 {

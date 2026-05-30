@@ -957,6 +957,39 @@ impl SemanticAnalyzer {
                     elem_ty,
                 })
             }
+
+            Expr::Cast { expr, ty, span } => {
+                let typed_expr = self.expression(expr, None)?;
+                let from_ty = typed_expr.get_type();
+                let to_ty = self.try_resolve_type_expression(ty)?;
+
+                // Validate cast is legal
+                let valid = match (&from_ty, &to_ty) {
+                    // numeric to numeric
+                    (a, b) if a.is_numeric() && b.is_numeric() => true,
+                    // pointer to pointer
+                    (Type::Ref(_), Type::Ref(_)) => true,
+                    // integer to pointer
+                    (a, Type::Ref(_)) if a.is_integer() => true,
+                    // pointer to integer
+                    (Type::Ref(_), b) if b.is_integer() => true,
+                    // same type (no-op)
+                    (a, b) if a == b => true,
+                    _ => false,
+                };
+
+                if !valid {
+                    return Err(self.record_error(
+                        format!("Type Error: Cannot cast {:?} to {:?}", from_ty, to_ty),
+                        *span,
+                    ));
+                }
+
+                Ok(TypedExpr::Cast {
+                    expr: Box::new(typed_expr),
+                    ty: to_ty,
+                })
+            }
         }
     }
 

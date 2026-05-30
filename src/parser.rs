@@ -852,7 +852,7 @@ impl Parser {
     }
 
     fn term(&mut self) -> Result<Expr, ParseError> {
-        let mut expr = self.factor()?;
+        let mut expr = self.cast()?;
 
         while self.match_token(TokenKind::Plus) || self.match_token(TokenKind::Minus) {
             let operator = self.previous();
@@ -877,7 +877,7 @@ impl Parser {
     }
 
     fn factor(&mut self) -> Result<Expr, ParseError> {
-        let mut expr = self.unary()?;
+        let mut expr = self.cast()?;
 
         while self.match_token(TokenKind::Star) || self.match_token(TokenKind::Slash) {
             let operator = self.previous();
@@ -896,6 +896,23 @@ impl Parser {
                 right: Box::new(right),
                 span,
             };
+        }
+
+        Ok(expr)
+    }
+
+    fn cast(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.unary()?;
+
+        while self.match_token(TokenKind::As) {
+            let ty = self.type_expression()?;
+            let span = Span {
+                line: expr.span().line,
+                col: expr.span().col,
+                start: expr.span().start,
+                end: ty.span().end,
+            };
+            expr = Expr::Cast { expr: Box::new(expr), ty, span };
         }
 
         Ok(expr)
@@ -1043,6 +1060,8 @@ impl Parser {
                     Expr::ArrayLiteral(elements, _) => Expr::ArrayLiteral(elements, span),
                     Expr::Index { object, index, .. } => Expr::Index { object, index, span },
                     Expr::IndexAssignment { object, index, value, .. } => Expr::IndexAssignment { object, index, value, span },
+                
+                    Expr::Cast { expr, ty, .. } => Expr::Cast { expr, ty, span },
                 };
 
                 Ok(updated_expr)

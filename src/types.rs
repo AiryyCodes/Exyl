@@ -343,6 +343,11 @@ pub enum TypedExpr {
         value: Box<TypedExpr>,
         elem_ty: Type,
     },
+
+    Cast {
+        expr: Box<TypedExpr>,
+        ty: Type,
+    },
 }
 
 impl TypedExpr {
@@ -372,6 +377,8 @@ impl TypedExpr {
             TypedExpr::ArrayLiteral { ty, .. } => ty.clone(),
             TypedExpr::Index { ty, .. } => ty.clone(),
             TypedExpr::IndexAssignment { .. } => Type::Void,
+
+            TypedExpr::Cast { ty, .. } => ty.clone(),
         }
     }
 }
@@ -598,6 +605,12 @@ impl<B: BuilderBackend> Emit<B> for TypedExpr {
                 let val = value.emit(backend);
                 backend.build_store_ptr(elem_ptr, val);
                 backend.const_void()
+            }
+
+            TypedExpr::Cast { expr, ty } => {
+                let from_ty = expr.get_type();
+                let val = expr.emit(backend);
+                backend.build_cast(val, &from_ty, ty)
             }
         }
     }

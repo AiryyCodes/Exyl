@@ -54,6 +54,7 @@ pub enum TokenKind {
     Struct,
     Impl,
     SelfKw,
+    As,
 
     // Other
     Identifier,

@@ -146,6 +146,12 @@ pub enum Expr {
         value: Box<Expr>,
         span: Span,
     },
+
+    Cast {
+        expr: Box<Expr>,
+        ty: TypeExpr,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -171,6 +177,8 @@ impl Expr {
             Expr::ArrayLiteral(_, span) => *span,
             Expr::Index { span, .. } => *span,
             Expr::IndexAssignment { span, .. } => *span,
+
+            Expr::Cast { span, .. } => *span,
         }
     }
 }

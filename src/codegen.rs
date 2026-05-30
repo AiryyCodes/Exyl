@@ -72,6 +72,8 @@ pub trait BuilderBackend {
     fn build_array_literal(&mut self, elements: Vec<Self::Value>, ty: &Type) -> Self::Value;
     fn build_array_gep(&self, ptr: Self::Value, index: Self::Value, elem_ty: &Type) -> Self::Value;
 
+    fn build_cast(&self, val: Self::Value, from: &Type, to: &Type) -> Self::Value;
+
     // Constant generation
     fn const_number(&self, val: f64, ty: &Type) -> Self::Value;
     fn const_string(&self, val: String) -> Self::Value;
