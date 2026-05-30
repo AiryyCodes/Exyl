@@ -434,6 +434,20 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
         }
     }
 
+    fn build_and(&self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        self.builder
+            .build_and(lhs.into_int_value(), rhs.into_int_value(), "and")
+            .unwrap()
+            .as_basic_value_enum()
+    }
+
+    fn build_or(&self, lhs: Self::Value, rhs: Self::Value) -> Self::Value {
+        self.builder
+            .build_or(lhs.into_int_value(), rhs.into_int_value(), "or")
+            .unwrap()
+            .as_basic_value_enum()
+    }
+
     fn build_alloca(&mut self, name: &str, ty: &Type) {
         let llvm_type = self.get_llvm_type(ty);
         let alloca = self.builder.build_alloca(llvm_type, name).unwrap();

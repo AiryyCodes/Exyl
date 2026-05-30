@@ -305,6 +305,8 @@ impl<B: BuilderBackend> Emit<B> for TypedExpr {
                     TokenKind::LessEqual => backend.build_lte(lhs, rhs, ty),
                     TokenKind::Greater => backend.build_gt(lhs, rhs, ty),
                     TokenKind::GreaterEqual => backend.build_gte(lhs, rhs, ty),
+                    TokenKind::AmpersandAmpersand => backend.build_and(lhs, rhs),
+                    TokenKind::PipePipe => backend.build_or(lhs, rhs),
                     _ => unreachable!(),
                 }
             }

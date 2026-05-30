@@ -143,7 +143,25 @@ impl Lexer {
                     self.analyze_char(&mut tokens);
                 }
 
-                '&' => self.add_token(&mut tokens, TokenKind::Ampersand),
+                '&' => {
+                    if self.peek() == '&' {
+                        self.advance();
+                        self.add_token(&mut tokens, TokenKind::AmpersandAmpersand);
+                    } else {
+                        self.add_token(&mut tokens, TokenKind::Ampersand);
+                    }
+                }
+                '|' => {
+                    if self.peek() == '|' {
+                        self.advance();
+                        self.add_token(&mut tokens, TokenKind::PipePipe);
+                    } else {
+                        panic!(
+                            "Lexical Error: Unexpected character: '|' at line {}, col {}",
+                            self.line, self.col
+                        );
+                    }
+                }
 
                 c if self.is_alpha(c) => {
                     self.analyze_identifier(&mut tokens);

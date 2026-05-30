@@ -480,7 +480,7 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> Result<Expr, ParseError> {
-        let expr = self.equality()?;
+        let expr = self.logical()?;
 
         if self.match_token(TokenKind::Equal) {
             let equals = self.previous();
@@ -547,6 +547,31 @@ impl Parser {
                     return Err(self.error_at(&op_token, "Syntax Error: Compound assignment target must be an identifier."));
                 }
             }
+        }
+
+        Ok(expr)
+    }
+
+    fn logical(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.equality()?;
+
+        while self.match_token(TokenKind::AmpersandAmpersand)
+            || self.match_token(TokenKind::PipePipe)
+        {
+            let operator = self.previous();
+            let right = self.equality()?;
+            let span = Span {
+                line: expr.span().line,
+                col: expr.span().col,
+                start: expr.span().start,
+                end: right.span().end,
+            };
+            expr = Expr::Binary {
+                left: Box::new(expr),
+                operator,
+                right: Box::new(right),
+                span,
+            };
         }
 
         Ok(expr)

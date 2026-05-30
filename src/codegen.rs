@@ -46,6 +46,9 @@ pub trait BuilderBackend {
     fn build_not(&self, val: Self::Value) -> Self::Value;
     fn build_neg(&self, val: Self::Value, ty: &Type) -> Self::Value;
 
+    fn build_and(&self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+    fn build_or(&self, lhs: Self::Value, rhs: Self::Value) -> Self::Value;
+
     // Memory operations
     fn build_alloca(&mut self, name: &str, ty: &Type);
     fn build_store(&mut self, name: &str, value: Self::Value);

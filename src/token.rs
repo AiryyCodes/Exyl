@@ -28,6 +28,8 @@ pub enum TokenKind {
     Comma,
     Ellipsis,
     Ampersand,
+    AmpersandAmpersand,
+    PipePipe,
 
     // Literals
     Number,

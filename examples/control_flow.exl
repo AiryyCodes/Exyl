@@ -15,9 +15,11 @@ fun main() {
     }
 
     let count = 0;
-    while count < 5 {
+    let count2 = 9;
+    while count > 5 || count2 == 9 {
         printf("Count: %d\n", count);
 
         count += 1;
+        count2 -= 1;
     }
 }

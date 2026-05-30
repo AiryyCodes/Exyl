@@ -550,6 +550,12 @@ impl SemanticAnalyzer {
                 }
                 None
             }
+            TokenKind::AmpersandAmpersand | TokenKind::PipePipe => {
+                if lhs == &Type::Bool && rhs == &Type::Bool {
+                    return Some(Type::Bool);
+                }
+                None
+            }
             _ => None,
         }
     }
