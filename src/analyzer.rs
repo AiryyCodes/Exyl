@@ -520,6 +520,19 @@ impl SemanticAnalyzer {
                 let typed_inner = self.expression(inner, None)?;
                 let inner_type = typed_inner.get_type().clone();
                 Ok(TypedExpr::AddressOf(Box::new(typed_inner), Type::Ref(Box::new(inner_type))))
+            },
+            Expr::Deref(inner, span) => {
+                let typed_inner = self.expression(inner, None)?;
+                match typed_inner.get_type() {
+                    Type::Ref(inner_type) => Ok(TypedExpr::Deref(
+                        Box::new(typed_inner),
+                        *inner_type,
+                    )),
+                    other => Err(self.record_error(
+                        format!("Type Error: Cannot dereference non-pointer type {:?}", other),
+                        span.clone(),
+                    )),
+                }
             }
         }
     }

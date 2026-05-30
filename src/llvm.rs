@@ -471,6 +471,13 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
         self.builder.build_load(llvm_type, *ptr, name).unwrap()
     }
 
+    fn build_load_ptr(&self, ptr: Self::Value, ty: &Type) -> Self::Value {
+        let llvm_type = self.get_llvm_type(ty);
+        self.builder
+            .build_load(llvm_type, ptr.into_pointer_value(), "deref")
+            .unwrap()
+    }
+
     fn build_call(&self, name: &str, args: Vec<Self::Value>, return_type: &Type) -> Self::Value {
         let function = self
             .module

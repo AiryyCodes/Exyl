@@ -94,6 +94,7 @@ pub enum Expr {
     },
 
     AddressOf(Box<Expr>, Span),
+    Deref(Box<Expr>, Span),
 }
 
 impl Expr {
@@ -110,6 +111,7 @@ impl Expr {
             Expr::Binary { span, .. } => *span,
             Expr::Unary { span, .. } => *span,
             Expr::AddressOf(_, span) => *span,
+            Expr::Deref(_, span) => *span,
         }
     }
 }

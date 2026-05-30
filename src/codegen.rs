@@ -53,6 +53,7 @@ pub trait BuilderBackend {
     fn build_alloca(&mut self, name: &str, ty: &Type);
     fn build_store(&mut self, name: &str, value: Self::Value);
     fn build_load(&self, name: &str, ty: &Type) -> Self::Value;
+    fn build_load_ptr(&self, ptr: Self::Value, ty: &Type) -> Self::Value;
 
     fn build_call(&self, name: &str, args: Vec<Self::Value>, return_type: &Type) -> Self::Value;
     fn build_return(&mut self, value: Option<Self::Value>);

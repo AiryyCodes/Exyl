@@ -1,0 +1,9 @@
+extern fun printf(fmt: string, ...): void;
+
+fun main() {
+    let flag = true;
+    let ptr = &flag;
+    if *ptr {
+        printf("flag is true\n");
+    }
+}

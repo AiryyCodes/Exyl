@@ -687,13 +687,25 @@ impl Parser {
             let right = self.unary()?;
             
             let span = Span {
-        line: operator.span.line,
-        col: operator.span.col,
-        start: operator.span.start, 
-        end: right.span().end,
-    };
+            line: operator.span.line,
+            col: operator.span.col,
+            start: operator.span.start, 
+            end: right.span().end,
+        };
 
             return Ok(Expr::AddressOf(Box::new(right), span))
+        }
+
+        if self.match_token(TokenKind::Star) {
+            let operator = self.previous();
+            let right = self.unary()?;
+            let span = Span {
+                line: operator.span.line,
+                col: operator.span.col,
+                start: operator.span.start,
+                end: right.span().end,
+            };
+            return Ok(Expr::Deref(Box::new(right), span));
         }
 
         if self.match_token(TokenKind::Minus) || self.match_token(TokenKind::Bang) {
@@ -756,6 +768,7 @@ impl Parser {
                     Expr::Binary { left, right, operator, .. } => Expr::Binary { left, right, operator, span },
                     Expr::Unary { operator, right, .. } => Expr::Unary { operator, right, span },
                     Expr::AddressOf(inner, _) => Expr::AddressOf(inner, span),
+                    Expr::Deref(inner, _) => Expr::Deref(inner, span),
                 };
 
                 Ok(updated_expr)
