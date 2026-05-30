@@ -222,30 +222,60 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
     }
 
     fn build_add(&self, lhs: Self::Value, rhs: Self::Value, ty: &Type) -> Self::Value {
-        if ty.is_float() {
-            self.builder
+        match ty {
+            Type::Ref(inner) => {
+                let elem_ty = self.get_llvm_type(inner);
+                unsafe {
+                    self.builder
+                        .build_gep(
+                            elem_ty,
+                            lhs.into_pointer_value(),
+                            &[rhs.into_int_value()],
+                            "ptраdd",
+                        )
+                        .unwrap()
+                        .as_basic_value_enum()
+                }
+            }
+            _ if ty.is_float() => self
+                .builder
                 .build_float_add(lhs.into_float_value(), rhs.into_float_value(), "fadd")
                 .unwrap()
-                .as_basic_value_enum()
-        } else {
-            self.builder
+                .as_basic_value_enum(),
+            _ => self
+                .builder
                 .build_int_add(lhs.into_int_value(), rhs.into_int_value(), "add")
                 .unwrap()
-                .as_basic_value_enum()
+                .as_basic_value_enum(),
         }
     }
 
     fn build_sub(&self, lhs: Self::Value, rhs: Self::Value, ty: &Type) -> Self::Value {
-        if ty.is_float() {
-            self.builder
+        match ty {
+            Type::Ref(inner) => {
+                let elem_ty = self.get_llvm_type(inner);
+                // Negate the index then GEP
+                let neg_rhs = self
+                    .builder
+                    .build_int_neg(rhs.into_int_value(), "neg")
+                    .unwrap();
+                unsafe {
+                    self.builder
+                        .build_gep(elem_ty, lhs.into_pointer_value(), &[neg_rhs], "ptrsub")
+                        .unwrap()
+                        .as_basic_value_enum()
+                }
+            }
+            _ if ty.is_float() => self
+                .builder
                 .build_float_sub(lhs.into_float_value(), rhs.into_float_value(), "fsub")
                 .unwrap()
-                .as_basic_value_enum()
-        } else {
-            self.builder
+                .as_basic_value_enum(),
+            _ => self
+                .builder
                 .build_int_sub(lhs.into_int_value(), rhs.into_int_value(), "sub")
                 .unwrap()
-                .as_basic_value_enum()
+                .as_basic_value_enum(),
         }
     }
 

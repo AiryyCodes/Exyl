@@ -1,0 +1,65 @@
+extern fun printf(fmt: string, ...): i32;
+extern fun malloc(size: i64): *u8;
+extern fun free(ptr: *u8): void;
+
+struct Pair<T> {
+    first: T,
+    second: T,
+}
+
+impl Pair<T> {
+    fun new(first: T, second: T): Pair<T> {
+        return Pair<T> { first: first, second: second };
+    }
+
+    fun get_first(self): T {
+        return self.first;
+    }
+}
+
+struct Array<T> {
+    data: *T,
+    len: i32,
+    cap: i32,
+}
+
+impl Array<T> {
+    fun new(): Array<T> {
+        let data = malloc(64) as *T;
+        return Array<T> { data: data, len: 0, cap: 16 };
+    }
+
+    fun push(self, value: T): void {
+        *(self.data + self.len) = value;
+        self.len = self.len + 1;
+    }
+
+    fun get(self, index: i32): T {
+        return *(self.data + index);
+    }
+}
+
+fun main(): i32 {
+    let dynamic_array = Array<i32>::new();
+    dynamic_array.push(69);
+    dynamic_array.push(420);
+    dynamic_array.push(20);
+    dynamic_array.push(283572);
+
+    let index = 0;
+    while index < dynamic_array.len {
+        printf("%d\n", dynamic_array.get(index));
+        
+        index += 1;
+    }
+
+    let p = Pair<i32>::new(10, 20);
+    let f = p.get_first();
+    printf("First: %d\n", f);
+
+    let fp = Pair<f32>::new(1.5, 2.5);
+    let ff = fp.get_first();
+    printf("First float: %f\n", ff);
+
+    return 0;
+}

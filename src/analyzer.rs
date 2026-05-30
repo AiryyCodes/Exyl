@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ast::{Expr, Program, Stmt, TypeExpr},
@@ -19,6 +19,13 @@ pub struct SemanticAnalyzer {
     current_return_type: Option<Type>,
     errors: Vec<TypeError>,
     struct_types: HashMap<String, Type>,
+
+    generic_structs: HashMap<String, Stmt>,
+    generic_impls: HashMap<String, Stmt>,
+    generic_functions: HashMap<String, Stmt>,
+    monomorphized: HashSet<String>,
+    extra_stmts: Vec<TypedStmt>,
+    current_subs: HashMap<String, Type>,
 }
 
 impl SemanticAnalyzer {
@@ -28,22 +35,64 @@ impl SemanticAnalyzer {
             current_return_type: None,
             errors: vec![],
             struct_types: HashMap::new(),
+            generic_structs: HashMap::new(),
+            generic_impls: HashMap::new(),
+            generic_functions: HashMap::new(),
+            monomorphized: HashSet::new(),
+            extra_stmts: vec![],
+            current_subs: HashMap::new(),
         }
     }
 
     pub fn analyze(mut self, program: &Program) -> (TypedProgram, Vec<TypeError>) {
-        let mut typed_nodes = vec![];
-
+        // Pre-pass: register all extern functions
         for stmt in &program.nodes {
-            match self.statement(stmt) {
-                Ok(typed_stmt) => typed_nodes.push(typed_stmt),
-                Err(err) => {
-                    self.errors.push(err);
+            if let Stmt::Fun { name, parameters, return_type, is_extern: true, is_variadic, .. } = stmt {
+                let mut resolved_params = vec![];
+                for (pname, ptype) in parameters {
+                    if let Ok(t) = self.try_resolve_type_expression(ptype) {
+                        resolved_params.push((pname.clone(), t));
+                    }
                 }
+                let resolved_return = match return_type {
+                    Some(t) => self.try_resolve_type_expression(t).unwrap_or(Type::Void),
+                    None => Type::Void,
+                };
+                self.environment.define(name.clone(), Symbol::Function {
+                    params: resolved_params,
+                    is_variadic: *is_variadic,
+                    return_type: resolved_return,
+                }).ok();
             }
         }
 
-        (TypedProgram { nodes: typed_nodes }, self.errors)
+        // Full pass
+        let mut typed_nodes = vec![];
+        for stmt in &program.nodes {
+            match self.statement(stmt) {
+                Ok(typed_stmt) => typed_nodes.push(typed_stmt),
+                Err(err) => self.errors.push(err),
+            }
+        }
+
+        // Emit order: externs first, then monomorphized, then everything else
+        let mut all_nodes: Vec<TypedStmt> = vec![];
+
+        for node in &typed_nodes {
+            if matches!(node, TypedStmt::Fun { is_extern: true, .. }) {
+                all_nodes.push(node.clone());
+            }
+        }
+
+        all_nodes.extend(self.extra_stmts);
+
+        for node in typed_nodes {
+            if !matches!(node, TypedStmt::Fun { is_extern: true, .. }) {
+                all_nodes.push(node);
+            }
+        }
+
+        (TypedProgram { nodes: all_nodes }, self.errors)
     }
 
     fn record_error(&mut self, message: String, span: Span) -> TypeError {
@@ -101,6 +150,7 @@ impl SemanticAnalyzer {
 
             Stmt::Fun {
                 name,
+                type_params,
                 parameters,
                 is_variadic,
                 return_type,
@@ -108,6 +158,12 @@ impl SemanticAnalyzer {
                 body,
                 span,
             } => {
+                // If generic, store and skip
+                if !type_params.is_empty() {
+                    self.generic_functions.insert(name.clone(), stmt.clone());
+                    return Ok(TypedStmt::Noop);
+                }
+
                 let mut resolved_params = vec![];
                 for (param_name, param_type) in parameters {
                     match self.try_resolve_type_expression(param_type) {
@@ -321,7 +377,12 @@ impl SemanticAnalyzer {
                 Ok(TypedStmt::Expr(typed_expr))
             }
 
-            Stmt::Struct { name, fields, .. } => {
+            Stmt::Struct { name, type_params, fields, .. } => {
+                if !type_params.is_empty() {
+                    self.generic_structs.insert(name.clone(), stmt.clone());
+                    return Ok(TypedStmt::Noop);
+                }
+
                 let mut resolved_fields = vec![];
 
                 for (field_name, field_type) in fields {
@@ -341,9 +402,15 @@ impl SemanticAnalyzer {
 
             Stmt::Impl {
                 target,
+                type_params,
                 methods,
                 span,
             } => {
+                if !type_params.is_empty() {
+                    self.generic_impls.insert(target.clone(), stmt.clone());
+                    return Ok(TypedStmt::Noop);
+                }
+
                 let struct_ty = self.struct_types.get(target).cloned().ok_or_else(|| {
                     self.record_error(
                         format!("impl target '{}' is not a known struct", target),
@@ -363,7 +430,7 @@ impl SemanticAnalyzer {
                         ..
                     } = method
                     {
-                        let mangled = format!("{}::{}", target, name);
+                        let mangled = format!("{}___{}", target, name);
 
                         // Resolve params — replace self/const self with the actual struct type
                         let mut resolved_params: Vec<(String, Type)> = vec![];
@@ -441,7 +508,7 @@ impl SemanticAnalyzer {
                         self.pop_scope();
 
                         typed_methods.push(TypedStmt::Fun {
-                            name: mangled, // ← store mangled name so LLVM emits it correctly
+                            name: mangled,
                             parameters: resolved_params,
                             is_variadic: *is_variadic,
                             return_type: resolved_return,
@@ -578,7 +645,7 @@ impl SemanticAnalyzer {
                         )),
                     };
 
-                    let mangled = format!("{}::{}", struct_name, field);
+                    let mangled = format!("{}___{}", struct_name, field);
 
                     match self.environment.lookup(&mangled) {
                         Some(Symbol::Function { params, is_variadic, return_type }) => {
@@ -735,7 +802,33 @@ impl SemanticAnalyzer {
                         span.clone(),
                     )),
                 }
-            },
+            }
+            Expr::DerefAssignment { ptr, value, span } => {
+                let typed_ptr = self.expression(ptr, None)?;
+                let ptr_ty = typed_ptr.get_type();
+
+                let inner_ty = match &ptr_ty {
+                    Type::Ref(inner) => *inner.clone(),
+                    other => return Err(self.record_error(
+                        format!("Type Error: Cannot deref-assign through non-pointer type {:?}", other),
+                        *span,
+                    )),
+                };
+
+                let typed_val = self.expression(value, Some(&inner_ty))?;
+
+                if !typed_val.get_type().is_assignable_to(&inner_ty) {
+                    return Err(self.record_error(
+                        format!("Type Error: Cannot assign {:?} through pointer to {:?}", typed_val.get_type(), inner_ty),
+                        *span,
+                    ));
+                }
+
+                Ok(TypedExpr::DerefAssignment {
+                    ptr: Box::new(typed_ptr),
+                    value: Box::new(typed_val),
+                })
+            }
 
             Expr::FieldAccess { object, field, span } => {
                 let typed_obj = self.expression(object, None)?;
@@ -859,7 +952,7 @@ impl SemanticAnalyzer {
             }
 
             Expr::StaticCall { type_name, method, arguments, span } => {
-                let mangled = format!("{}::{}", type_name, method);
+                let mangled = format!("{}___{}", type_name, method);
 
                 match self.environment.lookup(&mangled) {
                     Some(Symbol::Function { params, is_variadic, return_type }) => {
@@ -990,6 +1083,78 @@ impl SemanticAnalyzer {
                     ty: to_ty,
                 })
             }
+
+            Expr::GenericStaticCall { type_name, type_args, method, arguments, span } => {
+                let concrete_args: Vec<Type> = type_args.iter()
+                    .map(|a| self.try_resolve_type_expression(a))
+                    .collect::<Result<_, _>>()?;
+
+                let struct_ty = self.monomorphize_struct(type_name, &concrete_args, *span)?;
+                let mangled_struct = match &struct_ty {
+                    Type::Struct { name, .. } => name.clone(),
+                    _ => unreachable!(),
+                };
+
+                let mangled_method = format!("{}___{}", mangled_struct, method);
+
+                match self.environment.lookup(&mangled_method) {
+                    Some(Symbol::Function { params, return_type, is_variadic }) => {
+                        let mut typed_args = vec![];
+                        for (i, arg) in arguments.iter().enumerate() {
+                            let hint = params.get(i).map(|(_, t)| t);
+                            typed_args.push(self.expression(arg, hint)?);
+                        }
+                        Ok(TypedExpr::StaticCall {
+                            mangled_name: mangled_method,
+                            arguments: typed_args,
+                            return_type,
+                        })
+                    }
+                    _ => Err(self.record_error(
+                        format!("No static method '{}' on '{}'", method, type_name),
+                        *span,
+                    )),
+                }
+            }
+
+            Expr::GenericStructLiteral { type_name, type_args, fields, span } => {
+                let concrete_args: Vec<Type> = type_args.iter()
+                    .map(|a| {
+                        // Use active subs if inside a generic method
+                        if self.current_subs.is_empty() {
+                            self.try_resolve_type_expression(a)
+                        } else {
+                            self.resolve_type_with_subs(a, &self.current_subs.clone())
+                        }
+                    })
+                    .collect::<Result<_, _>>()?;
+
+                let struct_ty = self.monomorphize_struct(type_name, &concrete_args, *span)?;
+
+                let declared_fields = match &struct_ty {
+                    Type::Struct { fields, .. } => fields.clone(),
+                    _ => unreachable!(),
+                };
+
+                let mut typed_fields = vec![];
+                for (field_name, field_expr) in fields {
+                    let declared_type = declared_fields.iter()
+                        .find(|(n, _)| n == field_name)
+                        .map(|(_, t)| t.clone())
+                        .ok_or_else(|| self.record_error(
+                            format!("No field '{}' on struct '{}'", field_name, type_name),
+                            *span,
+                        ))?;
+                    let typed_val = self.expression(field_expr, Some(&declared_type))?;
+                    typed_fields.push((field_name.clone(), typed_val));
+                }
+
+                Ok(TypedExpr::StructLiteral {
+                    name: type_name.clone(),
+                    fields: typed_fields,
+                    ty: struct_ty,
+                })
+            }
         }
     }
 
@@ -1002,6 +1167,14 @@ impl SemanticAnalyzer {
                 if lhs == &Type::String && rhs == &Type::String && operator == &TokenKind::Plus {
                     return Some(Type::String);
                 }
+                if matches!(operator, TokenKind::Plus | TokenKind::Minus) {
+                    if let Type::Ref(inner) = lhs {
+                        if rhs.is_integer() {
+                            return Some(Type::Ref(inner.clone()));
+                        }
+                    }
+                }
+                
                 None
             }
             TokenKind::Less
@@ -1029,7 +1202,7 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn type_expression(&self, expr: &TypeExpr) -> Type {
+    fn type_expression(&mut self, expr: &TypeExpr) -> Type {
         match self.try_resolve_type_expression(expr) {
             Ok(t) => t,
             Err(e) => panic!(
@@ -1039,7 +1212,7 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn try_resolve_type_expression(&self, expr: &TypeExpr) -> Result<Type, TypeError> {
+    fn try_resolve_type_expression(&mut self, expr: &TypeExpr) -> Result<Type, TypeError> {
         match expr {
             TypeExpr::Primitive(name, span) => match name.as_str() {
                 "i8" => Ok(Type::I8),
@@ -1090,6 +1263,176 @@ impl SemanticAnalyzer {
                 let inner_ty = self.try_resolve_type_expression(inner)?;
                 Ok(Type::Ref(Box::new(inner_ty)))  // reuse existing Ref
             }
+
+            TypeExpr::Generic(name, span) => {
+                if let Some(concrete) = self.current_subs.get(name) {
+                    return Ok(concrete.clone());
+                }
+                Err(TypeError {
+                    message: format!("Type parameter '{}' used outside of a generic context", name),
+                    span: *span,
+                })
+            }
+
+            TypeExpr::GenericInstance { name, args, span } => {
+                let concrete_args: Vec<Type> = args.iter()
+                    .map(|a| self.try_resolve_type_expression(a))
+                    .collect::<Result<_, _>>()?;
+                self.monomorphize_struct(name, &concrete_args, *span)
+            }
+        }
+    }
+
+    fn monomorphize_struct(&mut self, name: &str, args: &[Type], span: Span) -> Result<Type, TypeError> {
+        let mangled = mangle_struct(name, args);
+
+        // Already monomorphized?
+        if let Some(ty) = self.struct_types.get(&mangled) {
+            return Ok(ty.clone());
+        }
+
+        let generic_stmt = self.generic_structs.get(name).cloned()
+            .ok_or_else(|| self.record_error(
+                format!("Unknown generic struct '{}'", name), span
+            ))?;
+
+        if let Stmt::Struct { type_params, fields, .. } = &generic_stmt {
+            let subs: HashMap<String, Type> = type_params.iter()
+                .zip(args.iter())
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+
+            let mut resolved_fields = vec![];
+            for (fname, ftype) in fields {
+                let ty = self.resolve_type_with_subs(ftype, &subs)?;
+                resolved_fields.push((fname.clone(), ty));
+            }
+
+            let struct_ty = Type::Struct {
+                name: mangled.clone(),
+                fields: resolved_fields,
+            };
+
+            self.struct_types.insert(mangled.clone(), struct_ty.clone());
+
+            // Monomorphize impl if one exists
+            if self.generic_impls.contains_key(name) {
+                self.monomorphize_impl(name, args, &subs, &mangled)?;
+            }
+
+            Ok(struct_ty)
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn monomorphize_impl(&mut self, name: &str, _args: &[Type], subs: &HashMap<String, Type>, mangled_struct: &str) -> Result<(), TypeError> {
+        let impl_stmt = self.generic_impls.get(name).cloned().unwrap();
+        let struct_ty = self.struct_types.get(mangled_struct).cloned().unwrap();
+
+        if let Stmt::Impl { methods, .. } = impl_stmt {
+            for method in &methods {
+                if let Stmt::Fun { name: method_name, parameters, return_type, is_variadic, body, .. } = method {
+                    let mangled_method = format!("{}___{}", mangled_struct, method_name);
+
+                    if self.monomorphized.contains(&mangled_method) {
+                        continue;
+                    }
+                    self.monomorphized.insert(mangled_method.clone());
+
+                    let mut resolved_params: Vec<(String, Type)> = vec![];
+                    for (pname, ptype) in parameters {
+                        let ty = if pname == "self" || pname == "const self" {
+                            Type::Ref(Box::new(struct_ty.clone()))
+                        } else {
+                            self.resolve_type_with_subs(ptype, subs)?
+                        };
+                        resolved_params.push((pname.clone(), ty));
+                    }
+
+                    let resolved_return = match return_type {
+                        Some(t) => self.resolve_type_with_subs(t, subs)?,
+                        None => Type::Void,
+                    };
+
+                    self.environment.define(mangled_method.clone(), Symbol::Function {
+                        params: resolved_params.clone(),
+                        is_variadic: *is_variadic,
+                        return_type: resolved_return.clone(),
+                    }).ok();
+
+                    let previous_return = self.current_return_type.replace(resolved_return.clone());
+
+                    let current_env = std::mem::replace(&mut self.environment, Environment::new(None));
+                    self.environment = Environment::new(Some(Box::new(current_env)));
+
+                    for (pname, pty) in &resolved_params {
+                        self.environment.define(pname.clone(), Symbol::Variable { ty: pty.clone() }).ok();
+                    }
+
+                    let prev_subs = std::mem::replace(&mut self.current_subs, subs.clone()); 
+                                       
+                    let typed_body = match body.as_deref() {
+                        Some(Stmt::Block(stmts, _)) => {
+                            let mut typed = vec![];
+                            for s in stmts {
+                                match self.statement(s) {
+                                    Ok(ts) => typed.push(ts),
+                                    Err(e) => self.errors.push(e),
+                                }
+                            }
+                            Some(Box::new(TypedStmt::Block(typed)))
+                        }
+                        _ => None,
+                    };
+
+                    self.current_subs = prev_subs;
+
+                    self.current_return_type = previous_return;
+                    self.pop_scope();
+
+                    self.extra_stmts.push(TypedStmt::Fun {
+                        name: mangled_method,
+                        parameters: resolved_params,
+                        is_variadic: *is_variadic,
+                        return_type: resolved_return,
+                        is_extern: false,
+                        body: typed_body,
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn resolve_type_with_subs(&mut self, ty: &TypeExpr, subs: &HashMap<String, Type>) -> Result<Type, TypeError> {
+        match ty {
+            TypeExpr::Generic(name, span) => {
+                subs.get(name).cloned().ok_or_else(|| TypeError {
+                    message: format!("Unknown type parameter '{}'", name),
+                    span: *span,
+                })
+            }
+            TypeExpr::Named(name, _) => {
+                if let Some(concrete) = subs.get(name) {
+                    return Ok(concrete.clone());
+                }
+                self.try_resolve_type_expression(ty)
+            }
+            TypeExpr::Pointer(inner, _) => {
+                Ok(Type::Ref(Box::new(self.resolve_type_with_subs(inner, subs)?)))
+            }
+            TypeExpr::Array(elem, size, _) => {
+                Ok(Type::Array(Box::new(self.resolve_type_with_subs(elem, subs)?), *size))
+            }
+            TypeExpr::GenericInstance { name, args, span } => {
+                let concrete: Vec<Type> = args.iter()
+                    .map(|a| self.resolve_type_with_subs(a, subs))
+                    .collect::<Result<_, _>>()?;
+                self.monomorphize_struct(name, &concrete, *span)
+            }
+
+            _ => self.try_resolve_type_expression(ty),
         }
     }
 
@@ -1100,5 +1443,32 @@ impl SemanticAnalyzer {
         } else {
             self.environment = Environment::new(None);
         }
+    }
+}
+
+fn mangle_struct(name: &str, args: &[Type]) -> String {
+    let parts: Vec<String> = args.iter().map(type_mangle).collect();
+    format!("{}___{}", name, parts.join("_"))
+}
+
+fn type_mangle(ty: &Type) -> String {
+    match ty {
+        Type::I8 => "i8".into(),
+        Type::I16 => "i16".into(),
+        Type::I32 => "i32".into(),
+        Type::I64 => "i64".into(),
+        Type::U8 => "u8".into(),
+        Type::U16 => "u16".into(),
+        Type::U32 => "u32".into(),
+        Type::U64 => "u64".into(),
+        Type::F32 => "f32".into(),
+        Type::F64 => "f64".into(),
+        Type::Bool => "bool".into(),
+        Type::String => "string".into(),
+        Type::Char => "char".into(),
+        Type::Ref(inner) => format!("ptr_{}", type_mangle(inner)),
+        Type::Array(elem, size) => format!("arr_{}_{}", size, type_mangle(elem)),
+        Type::Struct { name, .. } => name.clone(),
+        Type::Void => "void".into(),
     }
 }

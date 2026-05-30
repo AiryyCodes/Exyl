@@ -277,12 +277,18 @@ impl Parser {
 
     fn impl_decl(&mut self) -> Result<Stmt, ParseError> {
         let impl_token = self.previous();
+        let target = self.consume_expected(TokenKind::Identifier, "a struct name")?;
 
-        let target = self.consume_expected(
-            TokenKind::Identifier,
-            "a struct name following 'impl'",
-        )?;
-
+        let mut type_params = vec![];
+        if self.match_token(TokenKind::Less) {
+            loop {
+                let tp = self.consume_expected(TokenKind::Identifier, "a type parameter")?;
+                type_params.push(tp.lexeme);
+                if !self.match_token(TokenKind::Comma) { break; }
+            }
+            self.consume_expected(TokenKind::Greater, "'>'")?;
+        }
+        
         self.consume_expected(TokenKind::LeftBrace, "an opening '{' for impl body")?;
 
         let mut methods = vec![];
@@ -308,16 +314,22 @@ impl Parser {
             end: close.span.end,
         };
 
-        Ok(Stmt::Impl { target: target.lexeme, methods, span })
+        Ok(Stmt::Impl { target: target.lexeme, type_params, methods, span })
     }
 
     fn struct_decl(&mut self) -> Result<Stmt, ParseError> {
-        let struct_token = self.previous(); // the `struct` keyword
+        let struct_token = self.previous();
+        let name = self.consume_expected(TokenKind::Identifier, "a struct name")?;
 
-        let name = self.consume_expected(
-            TokenKind::Identifier,
-            "a struct name following 'struct'",
-        )?;
+        let mut type_params = vec![];
+        if self.match_token(TokenKind::Less) {
+            loop {
+                let tp = self.consume_expected(TokenKind::Identifier, "a type parameter")?;
+                type_params.push(tp.lexeme);
+                if !self.match_token(TokenKind::Comma) { break; }
+            }
+            self.consume_expected(TokenKind::Greater, "'>'")?;
+        }
 
         self.consume_expected(TokenKind::LeftBrace, "an opening '{' for struct body")?;
 
@@ -348,7 +360,7 @@ impl Parser {
             end: close.span.end,
         };
 
-        Ok(Stmt::Struct { name: name.lexeme, fields, span })
+        Ok(Stmt::Struct { name: name.lexeme, type_params, fields, span })
     }
 
     fn let_decl(&mut self) -> Result<Stmt, ParseError> {
@@ -418,6 +430,16 @@ impl Parser {
             TokenKind::Identifier,
             "a function name identifier following 'fun'",
         )?;
+
+        let mut type_params = vec![];
+        if self.match_token(TokenKind::Less) {
+            loop {
+                let tp = self.consume_expected(TokenKind::Identifier, "a type parameter")?;
+                type_params.push(tp.lexeme);
+                if !self.match_token(TokenKind::Comma) { break; }
+            }
+            self.consume_expected(TokenKind::Greater, "'>'")?;
+        }
 
         self.consume_expected(
             TokenKind::LeftParen,
@@ -506,6 +528,7 @@ impl Parser {
 
         Ok(Stmt::Fun {
             name: name.lexeme,
+            type_params,
             parameters: params,
             is_variadic,
             return_type,
@@ -581,6 +604,34 @@ impl Parser {
             TokenKind::Identifier,
             "a type name (e.g. 'i32', 'Vec2')",
         )?;
+
+        // Check for generic instantiation: Array<i32>
+        if self.check(TokenKind::Less) {
+            // peek ahead — is this really a generic type or a comparison?
+            // Heuristic: uppercase first letter = type
+            if token.lexeme.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                self.advance(); // consume 
+                let mut args = vec![];
+                loop {
+                    args.push(self.type_expression()?);
+                    if !self.match_token(TokenKind::Comma) { break; }
+                }
+                self.consume_expected(TokenKind::Greater, "'>'")?;
+                return Ok(TypeExpr::GenericInstance {
+                    name: token.lexeme,
+                    args,
+                    span: token.span,
+                });
+            }
+        }
+
+        // Check if it's a single-letter uppercase = type param (T, U, V)
+        let is_type_param = token.lexeme.len() == 1
+            && token.lexeme.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+
+        if is_type_param {
+            return Ok(TypeExpr::Generic(token.lexeme, token.span));
+        }
 
         // Primitives stay as Primitive, everything else becomes Named
         let is_primitive = matches!(
@@ -688,6 +739,20 @@ impl Parser {
                         span,
                     });
                 },
+
+                Expr::Deref(inner, deref_span) => {
+                    let span = Span {
+                        line: deref_span.line,
+                        col: deref_span.col,
+                        start: deref_span.start,
+                        end: value.span().end,
+                    };
+                    return Ok(Expr::DerefAssignment {
+                        ptr: inner,
+                        value: Box::new(value),
+                        span,
+                    });
+                }
 
                 Expr::FieldAccess { object, field, span: fa_span } => {
                     let span = Span {
@@ -985,6 +1050,52 @@ impl Parser {
             TokenKind::SelfKw => Ok(Expr::Identifier("self".to_string(), token.span)),
 
             TokenKind::Identifier => {
+                if self.check(TokenKind::Less)
+                    && token.lexeme.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+                {
+                    // Could be Array<i32>::new(...) or a struct literal Array<i32> { }
+                    // Consume the type args first
+                    self.advance(); // consume 
+                    let mut type_args = vec![];
+                    loop {
+                        type_args.push(self.type_expression()?);
+                        if !self.match_token(TokenKind::Comma) { break; }
+                    }
+                    self.consume_expected(TokenKind::Greater, "'>'")?;
+
+                    // Now check what follows
+                    if self.match_token(TokenKind::ColonColon) {
+                        // Array<i32>::new(...)
+                        let method = self.consume_expected(TokenKind::Identifier, "method name")?;
+                        self.consume_expected(TokenKind::LeftParen, "'('")?;
+                        let mut arguments = vec![];
+                        if !self.check(TokenKind::RightParen) {
+                            loop {
+                                arguments.push(self.expression()?);
+                                if !self.match_token(TokenKind::Comma) { break; }
+                            }
+                        }
+                        let close = self.consume_expected(TokenKind::RightParen, "')'")?;
+                        let span = Span {
+                            line: token.span.line,
+                            col: token.span.col,
+                            start: token.span.start,
+                            end: close.span.end,
+                        };
+                        return Ok(Expr::GenericStaticCall {
+                            type_name: token.lexeme,
+                            type_args,
+                            method: method.lexeme,
+                            arguments,
+                            span,
+                        });
+                    }
+
+                    if self.check(TokenKind::LeftBrace) {
+                        return self.generic_struct_literal(token, type_args);
+                    }
+                }
+                
                 if self.match_token(TokenKind::ColonColon) {
                     let method = self.consume_expected(
                         TokenKind::Identifier,
@@ -1050,8 +1161,11 @@ impl Parser {
                     Expr::Error(e, _) => Expr::Error(e, span),
                     Expr::Binary { left, right, operator, .. } => Expr::Binary { left, right, operator, span },
                     Expr::Unary { operator, right, .. } => Expr::Unary { operator, right, span },
+                    
                     Expr::AddressOf(inner, _) => Expr::AddressOf(inner, span),
                     Expr::Deref(inner, _) => Expr::Deref(inner, span),
+                    Expr::DerefAssignment { ptr, value, .. } => Expr::DerefAssignment { ptr, value, span },
+
                     Expr::FieldAccess { object, field, .. } => Expr::FieldAccess { object, field, span },
                     Expr::FieldAssignment { object, field, value, span } => Expr::FieldAssignment { object, field, value, span },
                     Expr::StructLiteral { name, fields, .. } => Expr::StructLiteral { name, fields, span },
@@ -1062,6 +1176,11 @@ impl Parser {
                     Expr::IndexAssignment { object, index, value, .. } => Expr::IndexAssignment { object, index, value, span },
                 
                     Expr::Cast { expr, ty, .. } => Expr::Cast { expr, ty, span },
+
+                    Expr::GenericStaticCall { type_name, type_args, method, arguments, .. } => Expr::GenericStaticCall { type_name, type_args, method, arguments, span },
+                    Expr::GenericStructLiteral { type_name, type_args, fields, .. } => {
+                        Expr::GenericStructLiteral { type_name, type_args, fields, span }
+                    }
                 };
 
                 Ok(updated_expr)
@@ -1123,6 +1242,37 @@ impl Parser {
 
         Ok(Expr::StructLiteral {
             name: name_token.lexeme,
+            fields,
+            span,
+        })
+    }
+
+    fn generic_struct_literal(&mut self, name_token: Token, type_args: Vec<TypeExpr>) -> Result<Expr, ParseError> {
+        self.consume_expected(TokenKind::LeftBrace, "'{'")?;
+
+        let mut fields = vec![];
+        while !self.is_at_end() && !self.check(TokenKind::RightBrace) {
+            let field_name = self.consume_expected(TokenKind::Identifier, "a field name")?;
+            self.consume_expected(TokenKind::Colon, "':'")?;
+            let value = self.expression()?;
+            fields.push((field_name.lexeme, value));
+            if !self.match_token(TokenKind::Comma) { break; }
+        }
+
+        let close = self.consume_expected(TokenKind::RightBrace, "'}'")?;
+
+        let span = Span {
+            line: name_token.span.line,
+            col: name_token.span.col,
+            start: name_token.span.start,
+            end: close.span.end,
+        };
+
+        // Desugar: treat as a regular StructLiteral with the mangled name
+        // The analyzer will resolve the type args and produce the right mangled name
+        Ok(Expr::GenericStructLiteral {
+            type_name: name_token.lexeme,
+            type_args,
             fields,
             span,
         })

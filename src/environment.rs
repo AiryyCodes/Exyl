@@ -29,6 +29,11 @@ impl Environment {
 
     pub fn define(&mut self, name: String, symbol: Symbol) -> Result<(), String> {
         if self.symbols.contains_key(&name) {
+            if let Symbol::Function { .. } = &symbol {
+                self.symbols.insert(name, symbol);
+                return Ok(());
+            }
+
             return Err(format!(
                 "Error: Identifier '{}' has already been declared in this scope.",
                 name

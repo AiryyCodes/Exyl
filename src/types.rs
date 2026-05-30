@@ -76,8 +76,10 @@ pub struct TypedProgram {
     pub nodes: Vec<TypedStmt>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypedStmt {
+    Noop,
+
     Let {
         name: String,
         ty: Type,
@@ -122,6 +124,8 @@ impl<B: BuilderBackend> Emit<B> for TypedStmt {
 
     fn emit(&self, backend: &mut B) -> Self::Output {
         match self {
+            TypedStmt::Noop => {}
+
             TypedStmt::Let { name, ty, value } => {
                 let val_code = value.emit(backend);
                 backend.build_alloca(name, ty);
@@ -261,7 +265,7 @@ impl<B: BuilderBackend> Emit<B> for TypedStmt {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypedExpr {
     Number(f64, Type),
     String(String),
@@ -292,6 +296,10 @@ pub enum TypedExpr {
 
     AddressOf(Box<TypedExpr>, Type),
     Deref(Box<TypedExpr>, Type),
+    DerefAssignment {
+        ptr: Box<TypedExpr>,
+        value: Box<TypedExpr>,
+    },
 
     FieldAccess {
         object: Box<TypedExpr>,
@@ -300,10 +308,10 @@ pub enum TypedExpr {
         ty: Type,
     },
     FieldAssignment {
-        object_name: String, // flattened — we only support `ident.field = val` for now
+        object_name: String,
         field_index: usize,
         value: Box<TypedExpr>,
-        object_ty: Type, // the struct type, needed for GEP
+        object_ty: Type,
     },
     StructLiteral {
         name: String,
@@ -366,6 +374,7 @@ impl TypedExpr {
 
             TypedExpr::AddressOf(_, ty) => ty.clone(),
             TypedExpr::Deref(_, ty) => ty.clone(),
+            TypedExpr::DerefAssignment { .. } => Type::Void,
 
             TypedExpr::FieldAccess { ty, .. } => ty.clone(),
             TypedExpr::FieldAssignment { .. } => Type::Void,
@@ -486,6 +495,12 @@ impl<B: BuilderBackend> Emit<B> for TypedExpr {
             TypedExpr::Deref(inner, ty) => {
                 let ptr = inner.emit(backend);
                 backend.build_load_ptr(ptr, ty)
+            }
+            TypedExpr::DerefAssignment { ptr, value } => {
+                let ptr_val = ptr.emit(backend);
+                let val = value.emit(backend);
+                backend.build_store_ptr(ptr_val, val);
+                backend.const_void()
             }
 
             TypedExpr::FieldAccess {

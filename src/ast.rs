@@ -21,6 +21,7 @@ pub enum Stmt {
     },
     Fun {
         name: String,
+        type_params: Vec<String>,
         parameters: Vec<(String, TypeExpr)>,
         is_variadic: bool,
         return_type: Option<TypeExpr>,
@@ -49,11 +50,13 @@ pub enum Stmt {
 
     Struct {
         name: String,
+        type_params: Vec<String>,
         fields: Vec<(String, TypeExpr)>,
         span: Span,
     },
     Impl {
         target: String,
+        type_params: Vec<String>,
         methods: Vec<Stmt>, // Vec of Stmt::Fun
         span: Span,
     },
@@ -109,6 +112,11 @@ pub enum Expr {
 
     AddressOf(Box<Expr>, Span),
     Deref(Box<Expr>, Span),
+    DerefAssignment {
+        ptr: Box<Expr>,
+        value: Box<Expr>,
+        span: Span,
+    },
 
     FieldAccess {
         object: Box<Expr>,
@@ -152,6 +160,20 @@ pub enum Expr {
         ty: TypeExpr,
         span: Span,
     },
+
+    GenericStaticCall {
+        type_name: String,
+        type_args: Vec<TypeExpr>,
+        method: String,
+        arguments: Vec<Expr>,
+        span: Span,
+    },
+    GenericStructLiteral {
+        type_name: String,
+        type_args: Vec<TypeExpr>,
+        fields: Vec<(String, Expr)>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -167,8 +189,11 @@ impl Expr {
             Expr::Error(_, span) => *span,
             Expr::Binary { span, .. } => *span,
             Expr::Unary { span, .. } => *span,
+
             Expr::AddressOf(_, span) => *span,
             Expr::Deref(_, span) => *span,
+            Expr::DerefAssignment { span, .. } => *span,
+
             Expr::FieldAccess { span, .. } => *span,
             Expr::FieldAssignment { span, .. } => *span,
             Expr::StructLiteral { span, .. } => *span,
@@ -179,6 +204,9 @@ impl Expr {
             Expr::IndexAssignment { span, .. } => *span,
 
             Expr::Cast { span, .. } => *span,
+
+            Expr::GenericStaticCall { span, .. } => *span,
+            Expr::GenericStructLiteral { span, .. } => *span,
         }
     }
 }
@@ -187,6 +215,12 @@ impl Expr {
 pub enum TypeExpr {
     Primitive(String, Span),
     Named(String, Span),
+    Generic(String, Span),
+    GenericInstance {
+        name: String,        // "Array"
+        args: Vec<TypeExpr>, // [i32]
+        span: Span,
+    },
 
     Array(Box<TypeExpr>, usize, Span),
     Pointer(Box<TypeExpr>, Span),
@@ -197,6 +231,8 @@ impl TypeExpr {
         match self {
             TypeExpr::Primitive(_, span) => *span,
             TypeExpr::Named(_, span) => *span,
+            TypeExpr::Generic(_, span) => *span,
+            TypeExpr::GenericInstance { span, .. } => *span,
 
             TypeExpr::Array(_, _, span) => *span,
             TypeExpr::Pointer(_, span) => *span,
