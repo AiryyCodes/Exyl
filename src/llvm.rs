@@ -2,7 +2,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicType, BasicTypeEnum};
-use inkwell::values::{BasicValue, BasicValueEnum, PointerValue};
+use inkwell::values::{AggregateValue, BasicValue, BasicValueEnum, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use std::collections::HashMap;
 
@@ -53,6 +53,16 @@ impl<'ctx> LlvmGenerator<'ctx> {
                 .context
                 .ptr_type(AddressSpace::from(0))
                 .as_basic_type_enum(),
+
+            Type::Struct { fields, .. } => {
+                let field_types: Vec<BasicTypeEnum<'ctx>> = fields
+                    .iter()
+                    .map(|(_, ty)| self.get_llvm_type(ty))
+                    .collect();
+                self.context
+                    .struct_type(&field_types, false)
+                    .as_basic_type_enum()
+            }
         }
     }
 }
@@ -74,6 +84,11 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
             .get(name)
             .unwrap_or_else(|| panic!("Undefined variable: {}", name))
             .as_basic_value_enum()
+    }
+
+    fn store_raw_param(&mut self, name: &str, value: Self::Value) {
+        self.named_values
+            .insert(name.to_string(), value.into_pointer_value());
     }
 
     fn append_basic_block(&self, name: &str) -> Self::BasicBlock {
@@ -166,6 +181,39 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
         }
 
         self.named_values.clear();
+    }
+
+    fn build_struct_field_ptr(
+        &self,
+        ptr: Self::Value,
+        field_index: usize,
+        ty: &Type,
+    ) -> Self::Value {
+        let llvm_struct_type = self.get_llvm_type(ty).into_struct_type();
+        let gep = self
+            .builder
+            .build_struct_gep(
+                llvm_struct_type,
+                ptr.into_pointer_value(),
+                field_index as u32,
+                "field_ptr",
+            )
+            .unwrap();
+        gep.as_basic_value_enum()
+    }
+
+    fn build_struct_literal(&mut self, fields: Vec<Self::Value>, ty: &Type) -> Self::Value {
+        let llvm_struct_type = self.get_llvm_type(ty).into_struct_type();
+        let mut agg = llvm_struct_type.get_undef().as_aggregate_value_enum();
+
+        for (i, field_val) in fields.iter().enumerate() {
+            agg = self
+                .builder
+                .build_insert_value(agg, *field_val, i as u32, "field")
+                .unwrap();
+        }
+
+        agg.into_struct_value().as_basic_value_enum()
     }
 
     fn build_add(&self, lhs: Self::Value, rhs: Self::Value, ty: &Type) -> Self::Value {
@@ -454,6 +502,13 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
         self.named_values.insert(name.to_string(), alloca);
     }
 
+    fn build_temp_alloca(&mut self, value: Self::Value, ty: &Type) -> Self::Value {
+        let llvm_type = self.get_llvm_type(ty);
+        let alloca = self.builder.build_alloca(llvm_type, "tmp").unwrap();
+        self.builder.build_store(alloca, value).unwrap();
+        alloca.as_basic_value_enum()
+    }
+
     fn build_store(&mut self, name: &str, value: Self::Value) {
         let ptr = self
             .named_values
@@ -478,6 +533,12 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
             .unwrap()
     }
 
+    fn build_store_ptr(&self, ptr: Self::Value, value: Self::Value) {
+        self.builder
+            .build_store(ptr.into_pointer_value(), value)
+            .unwrap();
+    }
+
     fn build_call(&self, name: &str, args: Vec<Self::Value>, return_type: &Type) -> Self::Value {
         let function = self
             .module
@@ -489,17 +550,52 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
         let processed_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = args
             .iter()
             .enumerate()
-            .map(|(_, arg)| {
-                if is_extern && arg.is_struct_value() {
-                    let struct_val = arg.into_struct_value();
-                    let raw_ptr = self
-                        .builder
-                        .build_extract_value(struct_val, 0, "abi_str_ptr")
-                        .unwrap();
-                    raw_ptr.into()
-                } else {
-                    (*arg).into()
+            .map(|(i, arg)| {
+                // Only check against declared param type for non-variadic positions
+                let param = function.get_nth_param(i as u32);
+                let is_variadic_position = param.is_none();
+
+                if is_variadic_position {
+                    if let BasicValueEnum::FloatValue(fval) = arg {
+                        if fval.get_type() == self.context.f32_type() {
+                            let promoted = self
+                                .builder
+                                .build_float_ext(*fval, self.context.f64_type(), "fprom")
+                                .unwrap();
+                            return promoted.as_basic_value_enum().into();
+                        }
+                    }
                 }
+
+                if is_extern && arg.is_struct_value() {
+                    let struct_ty = arg.into_struct_value().get_type();
+                    let is_string_struct = struct_ty.count_fields() == 2
+                        && struct_ty
+                            .get_field_type_at_index(0)
+                            .map(|t| t.is_pointer_type())
+                            .unwrap_or(false)
+                        && struct_ty
+                            .get_field_type_at_index(1)
+                            .map(|t| t.is_int_type())
+                            .unwrap_or(false);
+
+                    // Unwrap string struct to ptr if the param expects ptr,
+                    // OR if it's a variadic position (param is None)
+                    let param_is_ptr = param
+                        .map(|p| p.get_type().is_pointer_type())
+                        .unwrap_or(true); // variadic position — always unwrap strings
+
+                    if is_string_struct && param_is_ptr {
+                        let struct_val = arg.into_struct_value();
+                        let raw_ptr = self
+                            .builder
+                            .build_extract_value(struct_val, 0, "abi_str_ptr")
+                            .unwrap();
+                        return raw_ptr.into();
+                    }
+                }
+
+                (*arg).into()
             })
             .collect();
 

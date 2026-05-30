@@ -43,8 +43,20 @@ pub enum Stmt {
         body: Box<Stmt>,
         span: Span,
     },
+
     Block(Vec<Stmt>, Span),
     Expr(Expr, Span),
+
+    Struct {
+        name: String,
+        fields: Vec<(String, TypeExpr)>,
+        span: Span,
+    },
+    Impl {
+        target: String,
+        methods: Vec<Stmt>, // Vec of Stmt::Fun
+        span: Span,
+    },
 }
 
 impl Stmt {
@@ -57,6 +69,8 @@ impl Stmt {
             Stmt::Expr(_, span) => *span,
             Stmt::If { span, .. } => *span,
             Stmt::While { span, .. } => *span,
+            Stmt::Struct { span, .. } => *span,
+            Stmt::Impl { span, .. } => *span,
         }
     }
 }
@@ -95,6 +109,29 @@ pub enum Expr {
 
     AddressOf(Box<Expr>, Span),
     Deref(Box<Expr>, Span),
+
+    FieldAccess {
+        object: Box<Expr>,
+        field: String,
+        span: Span,
+    },
+    FieldAssignment {
+        object: Box<Expr>, // the struct
+        field: String,
+        value: Box<Expr>,
+        span: Span,
+    },
+    StructLiteral {
+        name: String,
+        fields: Vec<(String, Expr)>, // named: Vec2 { x: 1.0, y: 2.0 }
+        span: Span,
+    },
+    StaticCall {
+        type_name: String,
+        method: String,
+        arguments: Vec<Expr>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -112,6 +149,10 @@ impl Expr {
             Expr::Unary { span, .. } => *span,
             Expr::AddressOf(_, span) => *span,
             Expr::Deref(_, span) => *span,
+            Expr::FieldAccess { span, .. } => *span,
+            Expr::FieldAssignment { span, .. } => *span,
+            Expr::StructLiteral { span, .. } => *span,
+            Expr::StaticCall { span, .. } => *span,
         }
     }
 }
@@ -119,12 +160,15 @@ impl Expr {
 #[derive(Debug, Clone)]
 pub enum TypeExpr {
     Primitive(String, Span),
+
+    Named(String, Span),
 }
 
 impl TypeExpr {
     pub fn span(&self) -> Span {
         match self {
             TypeExpr::Primitive(_, span) => *span,
+            TypeExpr::Named(_, span) => *span,
         }
     }
 }

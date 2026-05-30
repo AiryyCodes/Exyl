@@ -113,7 +113,14 @@ impl Lexer {
                 '{' => self.add_token(&mut tokens, TokenKind::LeftBrace),
                 '}' => self.add_token(&mut tokens, TokenKind::RightBrace),
 
-                ':' => self.add_token(&mut tokens, TokenKind::Colon),
+                ':' => {
+                    if self.peek() == ':' {
+                        self.advance();
+                        self.add_token(&mut tokens, TokenKind::ColonColon);
+                    } else {
+                        self.add_token(&mut tokens, TokenKind::Colon);
+                    }
+                }
                 ';' => self.add_token(&mut tokens, TokenKind::Semicolon),
                 ',' => self.add_token(&mut tokens, TokenKind::Comma),
 
@@ -132,7 +139,7 @@ impl Lexer {
                             );
                         }
                     } else {
-                        // self.add_token(&mut tokens, TokenKind::Dot);
+                        self.add_token(&mut tokens, TokenKind::Dot);
                     }
                 }
 
@@ -208,6 +215,7 @@ impl Lexer {
 
         let kind = match text.as_str() {
             "let" => TokenKind::Let,
+            "const" => TokenKind::Const,
             "fun" => TokenKind::Fun,
             "return" => TokenKind::Return,
             "true" => TokenKind::True,
@@ -216,6 +224,9 @@ impl Lexer {
             "if" => TokenKind::If,
             "else" => TokenKind::Else,
             "while" => TokenKind::While,
+            "struct" => TokenKind::Struct,
+            "impl" => TokenKind::Impl,
+            "self" => TokenKind::SelfKw,
             _ => TokenKind::Identifier,
         };
 

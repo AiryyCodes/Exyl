@@ -8,6 +8,7 @@ pub trait BuilderBackend {
     fn is_block_terminated(&self) -> bool;
 
     fn get_variable_ptr(&self, name: &str) -> Self::Value;
+    fn store_raw_param(&mut self, name: &str, value: Self::Value);
 
     // Control flow
     fn append_basic_block(&self, name: &str) -> Self::BasicBlock;
@@ -31,6 +32,14 @@ pub trait BuilderBackend {
 
     fn end_function(&mut self);
 
+    fn build_struct_field_ptr(
+        &self,
+        ptr: Self::Value,
+        field_index: usize,
+        ty: &Type,
+    ) -> Self::Value;
+    fn build_struct_literal(&mut self, fields: Vec<Self::Value>, ty: &Type) -> Self::Value;
+
     // Primitive math abstractions
     fn build_add(&self, lhs: Self::Value, rhs: Self::Value, ty: &Type) -> Self::Value;
     fn build_sub(&self, lhs: Self::Value, rhs: Self::Value, ty: &Type) -> Self::Value;
@@ -51,9 +60,11 @@ pub trait BuilderBackend {
 
     // Memory operations
     fn build_alloca(&mut self, name: &str, ty: &Type);
+    fn build_temp_alloca(&mut self, value: Self::Value, ty: &Type) -> Self::Value;
     fn build_store(&mut self, name: &str, value: Self::Value);
     fn build_load(&self, name: &str, ty: &Type) -> Self::Value;
     fn build_load_ptr(&self, ptr: Self::Value, ty: &Type) -> Self::Value;
+    fn build_store_ptr(&self, ptr: Self::Value, value: Self::Value);
 
     fn build_call(&self, name: &str, args: Vec<Self::Value>, return_type: &Type) -> Self::Value;
     fn build_return(&mut self, value: Option<Self::Value>);

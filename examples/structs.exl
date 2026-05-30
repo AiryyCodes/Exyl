@@ -1,0 +1,19 @@
+extern fun printf(fmt: string, ...): i32;
+
+struct Vec2 {
+    x: f32,
+    y: f32,
+}
+
+struct Rect {
+    origin: Vec2,
+    width: f32,
+    height: f32,
+}
+
+fun main(): i32 {
+    let origin = Vec2 { x: 1.0, y: 2.0 };
+    let r = Rect { origin: origin, width: 10.0, height: 5.0 };
+    printf("origin.x: %f\n", r.origin.x);
+    return 0;
+}

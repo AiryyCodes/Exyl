@@ -114,6 +114,8 @@ impl Parser {
                 TokenKind::If => return,
                 TokenKind::Else => return,
                 TokenKind::While => return,
+                TokenKind::Struct => return,
+                TokenKind::Impl => return,
                 _ => {}
             }
 
@@ -151,6 +153,22 @@ impl Parser {
                 ));
             }
             return self.declaration(true);
+        }
+
+        if self.match_token(TokenKind::Struct) {
+            if is_extern {
+                let token = self.previous();
+                return Err(self.error_at(&token, "Syntax Error: 'extern' cannot be applied to struct definitions."));
+            }
+            return self.struct_decl();
+        }
+
+        if self.match_token(TokenKind::Impl) {
+            if is_extern {
+                let token = self.previous();
+                return Err(self.error_at(&token, "Syntax Error: 'extern' cannot be applied to impl blocks."));
+            }
+            return self.impl_decl();
         }
 
         if is_extern {
@@ -257,6 +275,82 @@ impl Parser {
         })
     }
 
+    fn impl_decl(&mut self) -> Result<Stmt, ParseError> {
+        let impl_token = self.previous();
+
+        let target = self.consume_expected(
+            TokenKind::Identifier,
+            "a struct name following 'impl'",
+        )?;
+
+        self.consume_expected(TokenKind::LeftBrace, "an opening '{' for impl body")?;
+
+        let mut methods = vec![];
+
+        while !self.is_at_end() && !self.check(TokenKind::RightBrace) {
+            if self.match_token(TokenKind::Fun) {
+                methods.push(self.fun_decl(false)?);
+            } else {
+                let token = self.peek().clone();
+                return Err(self.error_at(
+                    &token,
+                    "Syntax Error: Only 'fun' declarations are allowed inside an impl block.",
+                ));
+            }
+        }
+
+        let close = self.consume_expected(TokenKind::RightBrace, "a closing '}' for impl body")?;
+
+        let span = Span {
+            line: impl_token.span.line,
+            col: impl_token.span.col,
+            start: impl_token.span.start,
+            end: close.span.end,
+        };
+
+        Ok(Stmt::Impl { target: target.lexeme, methods, span })
+    }
+
+    fn struct_decl(&mut self) -> Result<Stmt, ParseError> {
+        let struct_token = self.previous(); // the `struct` keyword
+
+        let name = self.consume_expected(
+            TokenKind::Identifier,
+            "a struct name following 'struct'",
+        )?;
+
+        self.consume_expected(TokenKind::LeftBrace, "an opening '{' for struct body")?;
+
+        let mut fields = vec![];
+
+        while !self.is_at_end() && !self.check(TokenKind::RightBrace) {
+            let field_name = self.consume_expected(
+                TokenKind::Identifier,
+                "a field name",
+            )?;
+            self.consume_expected(TokenKind::Colon, "a ':' after field name")?;
+            let field_type = self.type_expression()?;
+
+            fields.push((field_name.lexeme, field_type));
+
+            // Trailing comma is optional on the last field
+            if !self.match_token(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        let close = self.consume_expected(TokenKind::RightBrace, "a closing '}' for struct body")?;
+
+        let span = Span {
+            line: struct_token.span.line,
+            col: struct_token.span.col,
+            start: struct_token.span.start,
+            end: close.span.end,
+        };
+
+        Ok(Stmt::Struct { name: name.lexeme, fields, span })
+    }
+
     fn let_decl(&mut self) -> Result<Stmt, ParseError> {
         let let_token = self.previous();
         let name = self.consume_expected(
@@ -345,15 +439,32 @@ impl Parser {
                     break;
                 }
 
-                let param_name =
-                    self.consume_expected(TokenKind::Identifier, "a parameter name declaration")?;
-                self.consume_expected(
-                    TokenKind::Colon,
-                    "a type annotation separator ':' directly following the parameter name",
-                )?;
-                let param_type = self.type_expression()?;
+                let is_const_self = self.check(TokenKind::Const)
+                    && self.tokens.get(self.current + 1)
+                        .map(|t| t.kind == TokenKind::SelfKw)
+                        .unwrap_or(false);
 
-                params.push((param_name.lexeme, param_type));
+                if is_const_self {
+                    self.advance(); // consume `const`
+                    let self_tok = self.advance(); // consume `self`
+                    // Use a sentinel type — semantic layer will fill in the real struct type
+                    params.push((
+                        "const self".to_string(),
+                        TypeExpr::Named("Self".to_string(), self_tok.span),
+                    ));
+                } else if self.check(TokenKind::SelfKw) {
+                    let self_tok = self.advance(); // consume `self`
+                    params.push((
+                        "self".to_string(),
+                        TypeExpr::Named("Self".to_string(), self_tok.span),
+                    ));
+                } else {
+                    // Normal param: name: Type
+                    let param_name = self.consume_expected(TokenKind::Identifier, "a parameter name")?;
+                    self.consume_expected(TokenKind::Colon, "a ':' after parameter name")?;
+                    let param_type = self.type_expression()?;
+                    params.push((param_name.lexeme, param_type));
+                }
 
                 if !self.match_token(TokenKind::Comma) {
                     break;
@@ -431,49 +542,79 @@ impl Parser {
     fn type_expression(&mut self) -> Result<TypeExpr, ParseError> {
         let token = self.consume_expected(
             TokenKind::Identifier,
-            "a primitive valid data type identifier name (e.g., 'i32', 'string')",
+            "a type name (e.g. 'i32', 'Vec2')",
         )?;
-        Ok(TypeExpr::Primitive(token.lexeme, token.span))
+
+        // Primitives stay as Primitive, everything else becomes Named
+        let is_primitive = matches!(
+            token.lexeme.as_str(),
+            "i8" | "i16" | "i32" | "i64"
+            | "u8" | "u16" | "u32" | "u64"
+            | "f32" | "f64" | "bool"
+            | "string" | "void" | "char"
+        );
+
+        if is_primitive {
+            Ok(TypeExpr::Primitive(token.lexeme, token.span))
+        } else {
+            Ok(TypeExpr::Named(token.lexeme, token.span))
+        }
     }
 
     fn call(&mut self) -> Result<Expr, ParseError> {
         let mut expr = self.primary()?;
 
-        while self.match_token(TokenKind::LeftParen) {
-            let mut arguments = vec![];
+          loop {
+            if self.match_token(TokenKind::LeftParen) {
+                // Function call: expr(args)
+                let mut arguments = vec![];
 
-            if !self.check(TokenKind::RightParen) {
-                loop {
-                    match self.expression() {
-                        Ok(arg) => arguments.push(arg),
-                        Err(e) => {
-                            return Err(self.error_at(&self.peek().clone(), &format!("Malformed argument item evaluation inside target call bounds: {}", e.message)));
+                if !self.check(TokenKind::RightParen) {
+                    loop {
+                        arguments.push(self.expression()?);
+                        if !self.match_token(TokenKind::Comma) {
+                            break;
                         }
                     }
-
-                    if !self.match_token(TokenKind::Comma) {
-                        break;
-                    }
                 }
+
+                let right_paren = self.consume_expected(TokenKind::RightParen, "a closing ')'")?;
+
+                let span = Span {
+                    line: expr.span().line,
+                    col: expr.span().col,
+                    start: expr.span().start,
+                    end: right_paren.span.end,
+                };
+
+                expr = Expr::Call { callee: Box::new(expr), arguments, span };
+
+            } else if self.match_token(TokenKind::Dot) {
+                // Field access or method call: expr.name or expr.name(args)
+                let field = self.consume_expected(
+                    TokenKind::Identifier,
+                    "a field or method name after '.'",
+                )?;
+
+                let access_span = Span {
+                    line: expr.span().line,
+                    col: expr.span().col,
+                    start: expr.span().start,
+                    end: field.span.end,
+                };
+
+                // Peek — if next token is `(` it's a method call
+                // We still produce FieldAccess here; the semantic layer
+                // will see Call { callee: FieldAccess{..}, .. } and desugar it
+                expr = Expr::FieldAccess {
+                    object: Box::new(expr),
+                    field: field.lexeme,
+                    span: access_span,
+                };
+
+            } else {
+                break;
             }
-
-            let right_paren = self.consume_expected(
-                TokenKind::RightParen,
-                "a closing function application call bracket match group ')'",
-            )?;
-
-            let span = Span {
-                line: expr.span().line,
-                col: expr.span().col,
-                start: expr.span().start,
-                end: right_paren.span.end,
-            };
-
-            expr = Expr::Call {
-                callee: Box::new(expr),
-                arguments,
-                span,
-            };
         }
 
         Ok(expr)
@@ -499,7 +640,23 @@ impl Parser {
                         value: Box::new(value),
                         span,
                     });
-                }
+                },
+
+                Expr::FieldAccess { object, field, span: fa_span } => {
+                    let span = Span {
+                        line: fa_span.line,
+                        col: fa_span.col,
+                        start: fa_span.start,
+                        end: value.span().end,
+                    };
+                    return Ok(Expr::FieldAssignment {
+                        object,
+                        field,
+                        value: Box::new(value),
+                        span,
+                    });
+                },
+
                 _ => {
                     return Err(self.error_at(&equals, &format!("Syntax Error: Assignment target must be a mutable identifier variable name, found unexpected target: {:?}", expr)));
                 }
@@ -741,9 +898,55 @@ impl Parser {
             }
             TokenKind::String => Ok(Expr::String(token.lexeme, token.span)),
             TokenKind::Char => Ok(Expr::Char(token.lexeme.chars().next().unwrap(), token.span)),
+
             TokenKind::True => Ok(Expr::Bool(true, token.span)),
             TokenKind::False => Ok(Expr::Bool(false, token.span)),
-            TokenKind::Identifier => Ok(Expr::Identifier(token.lexeme, token.span)),
+
+            TokenKind::SelfKw => Ok(Expr::Identifier("self".to_string(), token.span)),
+
+            TokenKind::Identifier => {
+                if self.match_token(TokenKind::ColonColon) {
+                    let method = self.consume_expected(
+                        TokenKind::Identifier,
+                        "a method name after '::'",
+                    )?;
+                    self.consume_expected(TokenKind::LeftParen, "a '(' after method name")?;
+
+                    let mut arguments = vec![];
+                    if !self.check(TokenKind::RightParen) {
+                        loop {
+                            arguments.push(self.expression()?);
+                            if !self.match_token(TokenKind::Comma) {
+                                break;
+                            }
+                        }
+                    }
+                    let right_paren = self.consume_expected(TokenKind::RightParen, "a closing ')'")?;
+
+                    let span = Span {
+                        line: token.span.line,
+                        col: token.span.col,
+                        start: token.span.start,
+                        end: right_paren.span.end,
+                    };
+
+                    return Ok(Expr::StaticCall {
+                        type_name: token.lexeme,
+                        method: method.lexeme,
+                        arguments,
+                        span,
+                    });
+                }
+
+                // Only treat as struct literal if name starts with uppercase
+                // This avoids ambiguity with function calls like printf(...)
+                if self.check(TokenKind::LeftBrace) 
+                    && token.lexeme.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) 
+                {
+                    return self.struct_literal(token);
+                }
+                Ok(Expr::Identifier(token.lexeme, token.span))
+            }
 
             TokenKind::LeftParen => {
                 let expr = self.expression()?;
@@ -769,6 +972,10 @@ impl Parser {
                     Expr::Unary { operator, right, .. } => Expr::Unary { operator, right, span },
                     Expr::AddressOf(inner, _) => Expr::AddressOf(inner, span),
                     Expr::Deref(inner, _) => Expr::Deref(inner, span),
+                    Expr::FieldAccess { object, field, .. } => Expr::FieldAccess { object, field, span },
+                    Expr::FieldAssignment { object, field, value, span } => Expr::FieldAssignment { object, field, value, span },
+                    Expr::StructLiteral { name, fields, .. } => Expr::StructLiteral { name, fields, span },
+                    Expr::StaticCall { type_name, method, arguments, span } => Expr::StaticCall { type_name, method, arguments, span },
                 };
 
                 Ok(updated_expr)
@@ -782,5 +989,38 @@ impl Parser {
                 Err(self.error_at(&token, &format!("Syntax Error: Expected an expression value, literal baseline, or bracket block grouping structure here but encountered '{}'.", token.lexeme)))
             }
         }
+    }
+
+    fn struct_literal(&mut self, name_token: Token) -> Result<Expr, ParseError> {
+        self.consume_expected(TokenKind::LeftBrace, "'{' for struct literal")?;
+
+        let mut fields = vec![];
+
+        while !self.is_at_end() && !self.check(TokenKind::RightBrace) {
+            let field_name = self.consume_expected(TokenKind::Identifier, "a field name")?;
+            self.consume_expected(TokenKind::Colon, "a ':' after field name")?;
+            let value = self.expression()?;
+
+            fields.push((field_name.lexeme, value));
+
+            if !self.match_token(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        let close = self.consume_expected(TokenKind::RightBrace, "a closing '}'")?;
+
+        let span = Span {
+            line: name_token.span.line,
+            col: name_token.span.col,
+            start: name_token.span.start,
+            end: close.span.end,
+        };
+
+        Ok(Expr::StructLiteral {
+            name: name_token.lexeme,
+            fields,
+            span,
+        })
     }
 }

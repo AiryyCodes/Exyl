@@ -24,12 +24,14 @@ pub enum TokenKind {
     LeftBrace,
     RightBrace,
     Colon,
+    ColonColon,
     Semicolon,
     Comma,
     Ellipsis,
     Ampersand,
     AmpersandAmpersand,
     PipePipe,
+    Dot,
 
     // Literals
     Number,
@@ -38,6 +40,7 @@ pub enum TokenKind {
 
     // Keywords
     Let,
+    Const,
     Fun,
     Return,
     True,
@@ -46,6 +49,9 @@ pub enum TokenKind {
     If,
     Else,
     While,
+    Struct,
+    Impl,
+    SelfKw,
 
     // Other
     Identifier,

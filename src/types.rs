@@ -21,6 +21,11 @@ pub enum Type {
     Char,
 
     Ref(Box<Type>),
+
+    Struct {
+        name: String,
+        fields: Vec<(String, Type)>,
+    },
 }
 
 impl Type {
@@ -49,6 +54,18 @@ impl Type {
 
     pub fn is_numeric(&self) -> bool {
         self.is_integer() || self.is_float()
+    }
+
+    pub fn get_field(&self, field: &str) -> Option<(usize, &Type)> {
+        if let Type::Struct { fields, .. } = self {
+            fields
+                .iter()
+                .enumerate()
+                .find(|(_, (n, _))| n == field)
+                .map(|(i, (_, t))| (i, t))
+        } else {
+            None
+        }
     }
 }
 
@@ -87,6 +104,15 @@ pub enum TypedStmt {
 
     Block(Vec<TypedStmt>),
     Expr(TypedExpr),
+
+    Struct {
+        name: String,
+        ty: Type,
+    },
+    Impl {
+        target: String,
+        methods: Vec<TypedStmt>,
+    },
 }
 
 impl<B: BuilderBackend> Emit<B> for TypedStmt {
@@ -131,8 +157,12 @@ impl<B: BuilderBackend> Emit<B> for TypedStmt {
                 }
 
                 for ((param_name, param_type), raw_value) in parameters.iter().zip(param_values) {
-                    backend.build_alloca(param_name, param_type);
-                    backend.build_store(param_name, raw_value);
+                    if param_name == "self" || param_name == "const self" {
+                        backend.store_raw_param(param_name, raw_value);
+                    } else {
+                        backend.build_alloca(param_name, param_type);
+                        backend.build_store(param_name, raw_value);
+                    }
                 }
 
                 if let Some(body) = body {
@@ -211,6 +241,20 @@ impl<B: BuilderBackend> Emit<B> for TypedStmt {
                 // Exit block
                 backend.position_at_end(&exit_block);
             }
+
+            TypedStmt::Struct { .. } => {
+                // Nothing to emit — struct types are resolved on demand
+                // by get_llvm_type when fields/variables are encountered.
+                // No LLVM IR is emitted for a struct declaration itself.
+            }
+
+            TypedStmt::Impl { methods, .. } => {
+                // Methods are just regular functions with a mangled name.
+                // Emit each one normally.
+                for method in methods {
+                    method.emit(backend);
+                }
+            }
         }
     }
 }
@@ -246,6 +290,40 @@ pub enum TypedExpr {
 
     AddressOf(Box<TypedExpr>, Type),
     Deref(Box<TypedExpr>, Type),
+
+    FieldAccess {
+        object: Box<TypedExpr>,
+        field: String,
+        field_index: usize,
+        ty: Type,
+    },
+    FieldAssignment {
+        object_name: String, // flattened — we only support `ident.field = val` for now
+        field_index: usize,
+        value: Box<TypedExpr>,
+        object_ty: Type, // the struct type, needed for GEP
+    },
+    StructLiteral {
+        name: String,
+        fields: Vec<(String, TypedExpr)>,
+        ty: Type,
+    },
+    StructLiteralPositional {
+        name: String,
+        args: Vec<TypedExpr>,
+        ty: Type,
+    },
+    StaticCall {
+        mangled_name: String,
+        arguments: Vec<TypedExpr>,
+        return_type: Type,
+    },
+    MethodCall {
+        mangled_name: String,
+        self_arg: Box<TypedExpr>,
+        arguments: Vec<TypedExpr>,
+        return_type: Type,
+    },
 }
 
 impl TypedExpr {
@@ -264,6 +342,13 @@ impl TypedExpr {
 
             TypedExpr::AddressOf(_, ty) => ty.clone(),
             TypedExpr::Deref(_, ty) => ty.clone(),
+
+            TypedExpr::FieldAccess { ty, .. } => ty.clone(),
+            TypedExpr::FieldAssignment { .. } => Type::Void,
+            TypedExpr::StructLiteral { ty, .. } => ty.clone(),
+            TypedExpr::StructLiteralPositional { ty, .. } => ty.clone(),
+            TypedExpr::StaticCall { return_type, .. } => return_type.clone(),
+            TypedExpr::MethodCall { return_type, .. } => return_type.clone(),
         }
     }
 }
@@ -278,7 +363,10 @@ impl<B: BuilderBackend> Emit<B> for TypedExpr {
             TypedExpr::Char(val) => backend.const_char(*val),
             TypedExpr::Bool(val) => backend.const_bool(*val),
 
-            TypedExpr::Identifier(name, ty) => backend.build_load(name, ty),
+            TypedExpr::Identifier(name, ty) => match ty {
+                Type::Ref(_) => backend.get_variable_ptr(name),
+                _ => backend.build_load(name, ty),
+            },
 
             TypedExpr::Assignment { name, value, .. } => {
                 let r_value = value.emit(backend);
@@ -346,11 +434,110 @@ impl<B: BuilderBackend> Emit<B> for TypedExpr {
                     let ptr = backend.get_variable_ptr(name);
                     ptr
                 }
-                _ => panic!("AddressOf only supported on identifiers for now"),
+                TypedExpr::FieldAccess {
+                    object,
+                    field_index,
+                    ..
+                } => {
+                    let struct_ptr = match object.as_ref() {
+                        TypedExpr::Identifier(name, _) => backend.get_variable_ptr(name),
+                        _ => panic!("AddressOf field access only supported on direct variables"),
+                    };
+                    let obj_ty = object.get_type();
+                    backend.build_struct_field_ptr(struct_ptr, *field_index, &obj_ty)
+                }
+
+                other => panic!("Cannot take address of non-lvalue expression: {:?}", other),
             },
             TypedExpr::Deref(inner, ty) => {
                 let ptr = inner.emit(backend);
                 backend.build_load_ptr(ptr, ty)
+            }
+
+            TypedExpr::FieldAccess {
+                object,
+                field_index,
+                ty,
+                ..
+            } => {
+                let obj_type = object.get_type();
+
+                let struct_ptr = match &obj_type {
+                    Type::Ref(_) => object.emit(backend),
+
+                    Type::Struct { .. } => match object.as_ref() {
+                        TypedExpr::Identifier(name, _) => backend.get_variable_ptr(name),
+
+                        // Chained field access: r.origin.x
+                        // Emit the inner expression (loads the struct value),
+                        // spill it to a temporary alloca, then GEP through that
+                        _ => {
+                            let val = object.emit(backend);
+                            backend.build_temp_alloca(val, &obj_type)
+                        }
+                    },
+
+                    _ => panic!("FieldAccess on non-struct type {:?}", obj_type),
+                };
+
+                let struct_ty = match &obj_type {
+                    Type::Ref(inner) => *inner.clone(),
+                    other => other.clone(),
+                };
+
+                let field_ptr =
+                    backend.build_struct_field_ptr(struct_ptr, *field_index, &struct_ty);
+                backend.build_load_ptr(field_ptr, ty)
+            }
+            TypedExpr::FieldAssignment {
+                object_name,
+                field_index,
+                value,
+                object_ty,
+            } => {
+                let struct_ptr = backend.get_variable_ptr(object_name);
+                let field_ptr = backend.build_struct_field_ptr(struct_ptr, *field_index, object_ty);
+                let val = value.emit(backend);
+                backend.build_store_ptr(field_ptr, val);
+                backend.const_void()
+            }
+
+            TypedExpr::StructLiteral { fields, ty, .. } => {
+                let field_values: Vec<B::Value> =
+                    fields.iter().map(|(_, expr)| expr.emit(backend)).collect();
+                backend.build_struct_literal(field_values, ty)
+            }
+
+            TypedExpr::StructLiteralPositional { args, ty, .. } => {
+                let field_values: Vec<B::Value> =
+                    args.iter().map(|expr| expr.emit(backend)).collect();
+                backend.build_struct_literal(field_values, ty)
+            }
+
+            TypedExpr::StaticCall {
+                mangled_name,
+                arguments,
+                return_type,
+            } => {
+                let args: Vec<B::Value> = arguments.iter().map(|a| a.emit(backend)).collect();
+                backend.build_call(mangled_name, args, return_type)
+            }
+
+            TypedExpr::MethodCall {
+                mangled_name,
+                self_arg,
+                arguments,
+                return_type,
+            } => {
+                // Always pass a pointer to self — never a loaded value
+                let self_ptr = match self_arg.as_ref() {
+                    TypedExpr::Identifier(name, _) => backend.get_variable_ptr(name),
+                    _ => panic!("Method call self must be a direct variable for now"),
+                };
+
+                let mut args = vec![self_ptr];
+                args.extend(arguments.iter().map(|a| a.emit(backend)));
+                backend.build_call(mangled_name, args, return_type)
             }
         }
     }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     ast::{Expr, Program, Stmt, TypeExpr},
     environment::{Environment, Symbol},
@@ -16,6 +18,7 @@ pub struct SemanticAnalyzer {
     environment: Environment,
     current_return_type: Option<Type>,
     errors: Vec<TypeError>,
+    struct_types: HashMap<String, Type>,
 }
 
 impl SemanticAnalyzer {
@@ -24,6 +27,7 @@ impl SemanticAnalyzer {
             environment: Environment::new(None),
             current_return_type: None,
             errors: vec![],
+            struct_types: HashMap::new(),
         }
     }
 
@@ -316,6 +320,142 @@ impl SemanticAnalyzer {
 
                 Ok(TypedStmt::Expr(typed_expr))
             }
+
+            Stmt::Struct { name, fields, .. } => {
+                let mut resolved_fields = vec![];
+
+                for (field_name, field_type) in fields {
+                    let ty = self.try_resolve_type_expression(field_type)?;
+                    resolved_fields.push((field_name.clone(), ty));
+                }
+                let struct_type = Type::Struct {
+                    name: name.clone(),
+                    fields: resolved_fields,
+                };
+                self.struct_types.insert(name.clone(), struct_type.clone());
+                Ok(TypedStmt::Struct {
+                    name: name.clone(),
+                    ty: struct_type,
+                })
+            }
+
+            Stmt::Impl {
+                target,
+                methods,
+                span,
+            } => {
+                let struct_ty = self.struct_types.get(target).cloned().ok_or_else(|| {
+                    self.record_error(
+                        format!("impl target '{}' is not a known struct", target),
+                        *span,
+                    )
+                })?;
+
+                let mut typed_methods = vec![];
+
+                for method in methods {
+                    if let Stmt::Fun {
+                        name,
+                        parameters,
+                        return_type,
+                        is_variadic,
+                        body,
+                        ..
+                    } = method
+                    {
+                        let mangled = format!("{}::{}", target, name);
+
+                        // Resolve params — replace self/const self with the actual struct type
+                        let mut resolved_params: Vec<(String, Type)> = vec![];
+                        for (param_name, param_type) in parameters {
+                            let ty = if param_name == "self" || param_name == "const self" {
+                                Type::Ref(Box::new(struct_ty.clone()))
+                            } else {
+                                self.try_resolve_type_expression(param_type)?
+                            };
+                            resolved_params.push((param_name.clone(), ty));
+                        }
+
+                        let resolved_return = match return_type {
+                            Some(t) => self.try_resolve_type_expression(t)?,
+                            None => Type::Void,
+                        };
+
+                        // Register mangled name in environment BEFORE typechecking body
+                        // so recursive calls work
+                        self.environment
+                            .define(
+                                mangled.clone(),
+                                Symbol::Function {
+                                    params: resolved_params.clone(),
+                                    is_variadic: *is_variadic,
+                                    return_type: resolved_return.clone(),
+                                },
+                            )
+                            .map_err(|e| self.record_error(e, *span))?;
+
+                        // Push a new scope for the method body
+                        let previous_return = self.current_return_type.clone();
+                        self.current_return_type = Some(resolved_return.clone());
+
+                        let current_env =
+                            std::mem::replace(&mut self.environment, Environment::new(None));
+                        self.environment = Environment::new(Some(Box::new(current_env)));
+
+                        // Register params into scope (self becomes a variable too)
+                        for (param_name, param_type) in &resolved_params {
+                            if let Err(e) = self.environment.define(
+                                param_name.clone(),
+                                Symbol::Variable {
+                                    ty: param_type.clone(),
+                                },
+                            ) {
+                                self.pop_scope();
+                                return Err(self.record_error(e, *span));
+                            }
+                        }
+
+                        // Typecheck body
+                        let typed_body = match body.as_deref() {
+                            Some(Stmt::Block(statements, _)) => {
+                                let mut typed_statements = vec![];
+                                for s in statements {
+                                    match self.statement(s) {
+                                        Ok(ts) => typed_statements.push(ts),
+                                        Err(err) => self.errors.push(err),
+                                    }
+                                }
+                                Some(Box::new(TypedStmt::Block(typed_statements)))
+                            }
+                            Some(other) => {
+                                self.pop_scope();
+                                return Err(self.record_error(
+                                    format!("Method '{}' body must be a block", name),
+                                    other.span(),
+                                ));
+                            }
+                            None => None,
+                        };
+
+                        self.current_return_type = previous_return;
+                        self.pop_scope();
+
+                        typed_methods.push(TypedStmt::Fun {
+                            name: mangled, // ← store mangled name so LLVM emits it correctly
+                            parameters: resolved_params,
+                            is_variadic: *is_variadic,
+                            return_type: resolved_return,
+                            is_extern: false,
+                            body: typed_body,
+                        });
+                    }
+                }
+
+                Ok(TypedStmt::Impl {
+                    target: target.clone(),
+                    methods: typed_methods,
+                })
+            }
         }
     }
 
@@ -419,6 +559,61 @@ impl SemanticAnalyzer {
             }
 
             Expr::Call { callee, arguments, span } => {
+                if let Expr::FieldAccess { object, field, .. } = &**callee {
+                    let typed_obj = self.expression(object, None)?;
+                    let obj_type = typed_obj.get_type();
+
+                    let struct_name = match &obj_type {
+                        Type::Struct { name, .. } => name.clone(),
+                        other => return Err(self.record_error(
+                            format!("Type Error: Cannot call method '{}' on non-struct type {:?}", field, other),
+                            *span,
+                        )),
+                    };
+
+                    let mangled = format!("{}::{}", struct_name, field);
+
+                    match self.environment.lookup(&mangled) {
+                        Some(Symbol::Function { params, is_variadic, return_type }) => {
+                            // params[0] is self — skip it for argument count check
+                            let user_params = if params.first()
+                                .map(|(n, _)| n == "self" || n == "const self")
+                                .unwrap_or(false)
+                            {
+                                &params[1..]
+                            } else {
+                                &params[..]
+                            };
+
+                            if !is_variadic && user_params.len() != arguments.len() {
+                                return Err(self.record_error(
+                                    format!("Call Error: Method '{}' expects {} arguments, got {}",
+                                        field, user_params.len(), arguments.len()),
+                                    *span,
+                                ));
+                            }
+
+                            let mut typed_arguments = vec![];
+                            for (i, arg) in arguments.iter().enumerate() {
+                                let expected_ty = user_params.get(i).map(|(_, t)| t);
+                                let typed_arg = self.expression(arg, expected_ty)?;
+                                typed_arguments.push(typed_arg);
+                            }
+
+                            return Ok(TypedExpr::MethodCall {
+                                mangled_name: mangled,
+                                self_arg: Box::new(typed_obj),
+                                arguments: typed_arguments,
+                                return_type,
+                            });
+                        }
+                        _ => return Err(self.record_error(
+                            format!("Type Error: No method '{}' on struct '{}'", field, struct_name),
+                            *span,
+                        )),
+                    }
+                }
+                
                 if let Expr::Identifier(func_name, id_span) = &**callee {
                     match self.environment.lookup(func_name) {
                         Some(Symbol::Function { params, is_variadic, return_type }) => {
@@ -533,6 +728,160 @@ impl SemanticAnalyzer {
                         span.clone(),
                     )),
                 }
+            },
+
+            Expr::FieldAccess { object, field, span } => {
+                let typed_obj = self.expression(object, None)?;
+                let obj_type = typed_obj.get_type();
+
+                let inner_type = match &obj_type {
+                    Type::Ref(inner) => *inner.clone(),
+                    other => other.clone(),
+                };
+
+
+                match &inner_type {
+                    Type::Struct { fields, .. } => {
+                        let found = fields.iter().enumerate()
+                            .find(|(_, (name, _))| name == field);
+                        match found {
+                            Some((idx, (_, field_ty))) => Ok(TypedExpr::FieldAccess {
+                                object: Box::new(typed_obj),
+                                field: field.clone(),
+                                field_index: idx,
+                                ty: field_ty.clone(),
+                            }),
+                            None => Err(self.record_error(
+                                format!("Type Error: No field '{}' on struct", field),
+                                *span,
+                            )),
+                        }
+                    }
+                    other => Err(self.record_error(
+                        format!("Type Error: Cannot access field '{}' on non-struct type {:?}", field, other),
+                        *span,
+                    )),
+                }
+            },
+            Expr::FieldAssignment { object, field, value, span } => {
+                let typed_obj = self.expression(object, None)?;
+                let obj_type = typed_obj.get_type();
+
+                let inner_type = match &obj_type {
+                    Type::Ref(inner) => *inner.clone(),
+                    other => other.clone(),
+                };
+                
+                let (field_index, field_ty) = match &inner_type {
+                    Type::Struct { .. } => {
+                        inner_type.get_field(field).ok_or_else(|| self.record_error(
+                            format!("Type Error: No field '{}' on struct", field),
+                            *span,
+                        ))?
+                    }
+                    other => return Err(self.record_error(
+                        format!("Type Error: Cannot assign field on non-struct type {:?}", other),
+                        *span,
+                    )),
+                };
+
+                let field_ty = field_ty.clone();
+                let typed_val = self.expression(value, Some(&field_ty))?;
+
+                if !typed_val.get_type().is_assignable_to(&field_ty) {
+                    return Err(self.record_error(
+                        format!("Type Error: Cannot assign {:?} to field '{}' of type {:?}",
+                            typed_val.get_type(), field, field_ty),
+                        value.span(),
+                    ));
+                }
+
+                // Flatten to object name — only identifiers supported for now
+                let object_name = match object.as_ref() {
+                    Expr::Identifier(name, _) => name.clone(),
+                    _ => return Err(self.record_error(
+                        "Field assignment only supported on direct variables for now.".to_string(),
+                        *span,
+                    )),
+                };
+
+                Ok(TypedExpr::FieldAssignment {
+                    object_name,
+                    field_index,
+                    value: Box::new(typed_val),
+                    object_ty: inner_type,
+                })
+            }
+
+            Expr::StructLiteral { name, fields, span } => {
+                let struct_ty = self.struct_types.get(name).cloned()
+                    .ok_or_else(|| self.record_error(
+                        format!("Type Error: Unknown struct '{}'", name),
+                        *span,
+                    ))?;
+
+                let declared_fields = match &struct_ty {
+                    Type::Struct { fields, .. } => fields.clone(),
+                    _ => unreachable!(),
+                };
+
+                let mut typed_fields = vec![];
+                for (field_name, field_expr) in fields {
+                    let declared_type = declared_fields.iter()
+                        .find(|(n, _)| n == field_name)
+                        .map(|(_, t)| t.clone())
+                        .ok_or_else(|| self.record_error(
+                            format!("Type Error: No field '{}' on struct '{}'", field_name, name),
+                            *span,
+                        ))?;
+                    let typed_val = self.expression(field_expr, Some(&declared_type))?;
+                    if !typed_val.get_type().is_assignable_to(&declared_type) {
+                        return Err(self.record_error(
+                            format!("Type Error: Field '{}' expects {:?}, got {:?}", field_name, declared_type, typed_val.get_type()),
+                            field_expr.span(),
+                        ));
+                    }
+                    typed_fields.push((field_name.clone(), typed_val));
+                }
+
+                Ok(TypedExpr::StructLiteral {
+                    name: name.clone(),
+                    fields: typed_fields,
+                    ty: struct_ty,
+                })
+            }
+
+            Expr::StaticCall { type_name, method, arguments, span } => {
+                let mangled = format!("{}::{}", type_name, method);
+
+                match self.environment.lookup(&mangled) {
+                    Some(Symbol::Function { params, is_variadic, return_type }) => {
+                        if !is_variadic && params.len() != arguments.len() {
+                            return Err(self.record_error(
+                                format!("Call Error: '{}::{}' expects {} arguments, got {}",
+                                    type_name, method, params.len(), arguments.len()),
+                                *span,
+                            ));
+                        }
+
+                        let mut typed_arguments = vec![];
+                        for (i, arg) in arguments.iter().enumerate() {
+                            let expected_ty = params.get(i).map(|(_, t)| t);
+                            let typed_arg = self.expression(arg, expected_ty)?;
+                            typed_arguments.push(typed_arg);
+                        }
+
+                        Ok(TypedExpr::StaticCall {
+                            mangled_name: mangled,
+                            arguments: typed_arguments,
+                            return_type,
+                        })
+                    }
+                    _ => Err(self.record_error(
+                        format!("Type Error: No static method '{}' on type '{}'", method, type_name),
+                        *span,
+                    )),
+                }
             }
         }
     }
@@ -608,6 +957,22 @@ impl SemanticAnalyzer {
                     span: span.clone(),
                 }),
             },
+            TypeExpr::Named(name, span) => {
+                // "Self" is resolved during impl processing, shouldn't appear here raw
+                if name == "Self" {
+                    return Err(TypeError {
+                        message: "'Self' can only be used inside an impl block".to_string(),
+                        span: *span,
+                    });
+                }
+                self.struct_types
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| TypeError {
+                        message: format!("Type Error: Unknown type '{}'", name),
+                        span: *span,
+                    })
+            }
         }
     }
 
