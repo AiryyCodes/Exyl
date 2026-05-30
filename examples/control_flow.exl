@@ -18,6 +18,6 @@ fun main() {
     while count < 5 {
         printf("Count: %d\n", count);
 
-        count = count + 1;
+        count += 1;
     }
 }

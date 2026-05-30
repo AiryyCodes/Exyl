@@ -506,6 +506,49 @@ impl Parser {
             }
         }
 
+        let compound_op = if self.match_token(TokenKind::PlusEqual) {
+            Some(TokenKind::Plus)
+        } else if self.match_token(TokenKind::MinusEqual) {
+            Some(TokenKind::Minus)
+        } else if self.match_token(TokenKind::StarEqual) {
+            Some(TokenKind::Star)
+        } else if self.match_token(TokenKind::SlashEqual) {
+            Some(TokenKind::Slash)
+        } else {
+            None
+        };
+
+        if let Some(op_kind) = compound_op {
+            let op_token = self.previous();
+            let value = self.assignment()?;
+
+            match expr {
+                Expr::Identifier(name, id_span) => {
+                    let span = Span {
+                        line: id_span.line,
+                        col: id_span.col,
+                        start: id_span.start,
+                        end: value.span().end,
+                    };
+                    // Desugar: x += y  =>  x = x + y
+                    let binary = Expr::Binary {
+                        left: Box::new(Expr::Identifier(name.clone(), id_span)),
+                        right: Box::new(value),
+                        operator: Token { kind: op_kind, lexeme: op_token.lexeme, span: op_token.span },
+                        span,
+                    };
+                    return Ok(Expr::Assignment {
+                        name,
+                        value: Box::new(binary),
+                        span,
+                    });
+                }
+                _ => {
+                    return Err(self.error_at(&op_token, "Syntax Error: Compound assignment target must be an identifier."));
+                }
+            }
+        }
+
         Ok(expr)
     }
 

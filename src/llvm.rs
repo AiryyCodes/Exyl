@@ -42,7 +42,6 @@ impl<'ctx> LlvmGenerator<'ctx> {
                 let i8_ptr = self.context.ptr_type(inkwell::AddressSpace::from(0));
                 let i32_type = self.context.i32_type();
 
-                // Return an anonymous structure type matching your value footprint
                 self.context
                     .struct_type(&[i8_ptr.into(), i32_type.into()], false)
                     .as_basic_type_enum()

@@ -98,6 +98,15 @@ impl Lexer {
                         self.add_token(&mut tokens, TokenKind::Star);
                     }
                 }
+                '/' => {
+                    if self.peek() == '=' {
+                        // Consume '='
+                        self.advance();
+                        self.add_token(&mut tokens, TokenKind::SlashEqual);
+                    } else {
+                        self.add_token(&mut tokens, TokenKind::Slash);
+                    }
+                }
 
                 '(' => self.add_token(&mut tokens, TokenKind::LeftParen),
                 ')' => self.add_token(&mut tokens, TokenKind::RightParen),

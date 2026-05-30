@@ -1,6 +1,5 @@
 extern fun printf(fmt: string, ...): void;
 extern fun scanf(fmt: string, ...): void;
-extern fun strcmp(a: string, b: string): i32;
 
 fun main(): i32 {
     let a = 0;
@@ -24,7 +23,7 @@ fun main(): i32 {
     } else if op == '*' {
         result = a * b;
     } else {
-        printf("Invalid operator: %s\n", op);
+        printf("Invalid operator: %c\n", op);
         return 0;
     }
 
