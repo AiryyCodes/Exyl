@@ -660,6 +660,7 @@ impl Parser {
                 Ok(Expr::Number(val, token.span))
             }
             TokenKind::String => Ok(Expr::String(token.lexeme, token.span)),
+            TokenKind::Char => Ok(Expr::Char(token.lexeme.chars().next().unwrap(), token.span)),
             TokenKind::True => Ok(Expr::Bool(true, token.span)),
             TokenKind::False => Ok(Expr::Bool(false, token.span)),
             TokenKind::Identifier => Ok(Expr::Identifier(token.lexeme, token.span)),
@@ -678,6 +679,7 @@ impl Parser {
                 let updated_expr = match expr {
                     Expr::Number(v, _) => Expr::Number(v, span),
                     Expr::String(s, _) => Expr::String(s, span),
+                    Expr::Char(s, _) => Expr::Char(s, span),
                     Expr::Bool(b, _) => Expr::Bool(b, span),
                     Expr::Identifier(i, _) => Expr::Identifier(i, span),
                     Expr::Call { callee, arguments, .. } => Expr::Call { callee, arguments, span },

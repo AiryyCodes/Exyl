@@ -48,6 +48,7 @@ impl<'ctx> LlvmGenerator<'ctx> {
                     .as_basic_type_enum()
             }
             Type::Void => panic!("Void type cannot represent raw values."),
+            Type::Char => self.context.i8_type().as_basic_type_enum(),
 
             Type::Ref(_) => self
                 .context
@@ -560,5 +561,12 @@ impl<'ctx> BuilderBackend for LlvmGenerator<'ctx> {
 
     fn const_void(&self) -> Self::Value {
         self.context.i32_type().const_zero().as_basic_value_enum()
+    }
+
+    fn const_char(&self, val: char) -> Self::Value {
+        self.context
+            .i8_type()
+            .const_int(val as u64, false)
+            .as_basic_value_enum()
     }
 }

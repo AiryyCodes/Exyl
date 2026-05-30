@@ -347,6 +347,7 @@ impl SemanticAnalyzer {
             }
 
             Expr::String(val, _) => Ok(TypedExpr::String(val.clone())),
+            Expr::Char(val, _) => Ok(TypedExpr::Char(*val)),
 
             Expr::Bool(val, _) => Ok(TypedExpr::Bool(*val)),
 
@@ -579,6 +580,7 @@ impl SemanticAnalyzer {
                 "bool" => Ok(Type::Bool),
                 "string" => Ok(Type::String),
                 "void" => Ok(Type::Void),
+                "char" => Ok(Type::Char),
                 _ => Err(TypeError {
                     message: format!(
                         "Type Validation Error: The token identifier descriptor reference '{}' does not match a valid compiler core primitive variant type choice.",

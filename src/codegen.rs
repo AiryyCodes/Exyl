@@ -59,6 +59,7 @@ pub trait BuilderBackend {
     fn const_string(&self, val: String) -> Self::Value;
     fn const_bool(&self, val: bool) -> Self::Value;
     fn const_void(&self) -> Self::Value;
+    fn const_char(&self, val: char) -> Self::Value;
 }
 
 pub trait Emit<B: BuilderBackend> {

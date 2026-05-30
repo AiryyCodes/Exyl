@@ -18,6 +18,7 @@ pub enum Type {
     Bool,
     String,
     Void,
+    Char,
 
     Ref(Box<Type>),
 }
@@ -218,6 +219,7 @@ impl<B: BuilderBackend> Emit<B> for TypedStmt {
 pub enum TypedExpr {
     Number(f64, Type),
     String(String),
+    Char(char),
     Bool(bool),
     Identifier(String, Type),
     Assignment {
@@ -255,6 +257,7 @@ impl TypedExpr {
             TypedExpr::Assignment { ty, .. } => ty.clone(),
 
             TypedExpr::String(_) => Type::String,
+            TypedExpr::Char(_) => Type::Char,
             TypedExpr::Bool(_) => Type::Bool,
 
             TypedExpr::AddressOf(_, ty) => ty.clone(),
@@ -269,6 +272,7 @@ impl<B: BuilderBackend> Emit<B> for TypedExpr {
         match self {
             TypedExpr::Number(val, ty) => backend.const_number(*val, ty),
             TypedExpr::String(val) => backend.const_string(val.clone()),
+            TypedExpr::Char(val) => backend.const_char(*val),
             TypedExpr::Bool(val) => backend.const_bool(*val),
 
             TypedExpr::Identifier(name, ty) => backend.build_load(name, ty),

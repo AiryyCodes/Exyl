@@ -130,6 +130,9 @@ impl Lexer {
                 '"' => {
                     self.analyze_string(&mut tokens);
                 }
+                '\'' => {
+                    self.analyze_char(&mut tokens);
+                }
 
                 '&' => self.add_token(&mut tokens, TokenKind::Ampersand),
 
@@ -270,6 +273,66 @@ impl Lexer {
             lexeme: parsed_string,
             span: Span {
                 line: start_line,
+                col: self.token_start_col,
+                start: self.start,
+                end: self.current,
+            },
+        });
+    }
+
+    fn analyze_char(&mut self, tokens: &mut Vec<Token>) {
+        if self.peek() == '\'' {
+            panic!(
+                "Lexical Error: Empty char literal at line {}, col {}",
+                self.line, self.col
+            );
+        }
+
+        if self.is_at_end() {
+            panic!(
+                "Lexical Error: Unterminated char literal at line {}, col {}",
+                self.line, self.col
+            );
+        }
+
+        let c = self.advance();
+
+        let parsed_char = if c == '\\' {
+            if self.is_at_end() {
+                panic!(
+                    "Lexical Error: Unterminated char escape sequence at line {}, col {}",
+                    self.line, self.col
+                );
+            }
+            match self.advance() {
+                'n' => '\n',
+                't' => '\t',
+                'r' => '\r',
+                '\\' => '\\',
+                '\'' => '\'',
+                '0' => '\0',
+                other => panic!(
+                    "Lexical Error: Unknown char escape sequence: \\{} at line {}, col {}",
+                    other, self.line, self.col
+                ),
+            }
+        } else {
+            c
+        };
+
+        if self.is_at_end() || self.peek() != '\'' {
+            panic!(
+                "Lexical Error: Expected closing \"'\" after char literal at line {}, col {}",
+                self.line, self.col
+            );
+        }
+        self.advance(); // consume closing '
+
+        tokens.push(Token {
+            kind: TokenKind::Char,
+            lexeme: parsed_char.to_string(),
+            span: Span {
+                line: self.line,
                 col: self.token_start_col,
                 start: self.start,
                 end: self.current,

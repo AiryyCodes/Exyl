@@ -5,7 +5,7 @@ extern fun strcmp(a: string, b: string): i32;
 fun main(): i32 {
     let a = 0;
     let b = 0;
-    let op = 0;
+    let op = '+';
 
     printf("Enter a: ");
     scanf("%d", &a);
@@ -17,11 +17,11 @@ fun main(): i32 {
     scanf(" %c", &op);
 
     let result = 0;
-    if op == 43 {
+    if op == '+' {
         result = a + b;
-    } else if op == 45 {
+    } else if op == '-' {
         result = a - b;
-    } else if op == 42 {
+    } else if op == '*' {
         result = a * b;
     } else {
         printf("Invalid operator: %s\n", op);
