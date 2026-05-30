@@ -386,10 +386,13 @@ impl<B: BuilderBackend> Emit<B> for TypedExpr {
             TypedExpr::Char(val) => backend.const_char(*val),
             TypedExpr::Bool(val) => backend.const_bool(*val),
 
-            TypedExpr::Identifier(name, ty) => match ty {
-                Type::Ref(_) => backend.get_variable_ptr(name),
-                _ => backend.build_load(name, ty),
-            },
+            TypedExpr::Identifier(name, ty) => {
+                if name == "self" {
+                    backend.get_variable_ptr(name)
+                } else {
+                    backend.build_load(name, ty)
+                }
+            }
 
             TypedExpr::Assignment { name, value, .. } => {
                 let r_value = value.emit(backend);
@@ -463,6 +466,7 @@ impl<B: BuilderBackend> Emit<B> for TypedExpr {
                     ..
                 } => {
                     let struct_ptr = match object.as_ref() {
+                        TypedExpr::Identifier(name, _) if name == "self" => object.emit(backend),
                         TypedExpr::Identifier(name, _) => backend.get_variable_ptr(name),
                         _ => panic!("AddressOf field access only supported on direct variables"),
                     };

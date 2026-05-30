@@ -565,6 +565,13 @@ impl SemanticAnalyzer {
 
                     let struct_name = match &obj_type {
                         Type::Struct { name, .. } => name.clone(),
+                        Type::Ref(inner) => match inner.as_ref() {
+                            Type::Struct { name, .. } => name.clone(),
+                            other => return Err(self.record_error(
+                                format!("Type Error: Cannot call method '{}' on non-struct type {:?}", field, other),
+                                *span,
+                            )),
+                        },
                         other => return Err(self.record_error(
                             format!("Type Error: Cannot call method '{}' on non-struct type {:?}", field, other),
                             *span,
@@ -1044,6 +1051,11 @@ impl SemanticAnalyzer {
             TypeExpr::Array(elem, size, _) => {
                 let elem_ty = self.try_resolve_type_expression(elem)?;
                 Ok(Type::Array(Box::new(elem_ty), *size))
+            }
+
+            TypeExpr::Pointer(inner, _) => {
+                let inner_ty = self.try_resolve_type_expression(inner)?;
+                Ok(Type::Ref(Box::new(inner_ty)))  // reuse existing Ref
             }
         }
     }

@@ -1,19 +1,22 @@
 extern fun printf(fmt: string, ...): i32;
 
-struct Vec2 {
-    x: f32,
-    y: f32,
+struct Counter {
+    value: i32,
 }
 
-struct Rect {
-    origin: Vec2,
-    width: f32,
-    height: f32,
+impl Counter {
+    fun increment(self): void {
+        self.value = self.value + 1;
+    }
+
+    fun double_increment(self): void {
+        self.increment();
+    }
 }
 
 fun main(): i32 {
-    let origin = Vec2 { x: 1.0, y: 2.0 };
-    let r = Rect { origin: origin, width: 10.0, height: 5.0 };
-    printf("origin.x: %f\n", r.origin.x);
+    let c = Counter { value: 0 };
+    c.double_increment();
+    printf("Value: %d\n", c.value);
     return 0;
 }

@@ -1,5 +1,9 @@
 extern fun printf(fmt: string, ...): i32;
 
+fun ptr_test(ptr: *i32) {
+    printf("Value: %d\n", *ptr);
+}
+
 fun main(): i32 {
     let a: [4]f32 = [1.0, 2.0, 3.0, 4.0];
 
@@ -9,6 +13,9 @@ fun main(): i32 {
     a[1] = 99.0;
 
     printf("a[1]: %f\n", a[1]);
+
+    let test_value = 69;
+    ptr_test(&test_value);
 
     return 0;
 }

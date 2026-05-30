@@ -181,6 +181,7 @@ pub enum TypeExpr {
     Named(String, Span),
 
     Array(Box<TypeExpr>, usize, Span),
+    Pointer(Box<TypeExpr>, Span),
 }
 
 impl TypeExpr {
@@ -190,6 +191,7 @@ impl TypeExpr {
             TypeExpr::Named(_, span) => *span,
 
             TypeExpr::Array(_, _, span) => *span,
+            TypeExpr::Pointer(_, span) => *span,
         }
     }
 }

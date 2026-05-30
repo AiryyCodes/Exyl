@@ -540,6 +540,18 @@ impl Parser {
     }
 
     fn type_expression(&mut self) -> Result<TypeExpr, ParseError> {
+        if self.match_token(TokenKind::Star) {
+                let star = self.previous();
+                let inner = self.type_expression()?;
+                let span = Span {
+                    line: star.span.line,
+                    col: star.span.col,
+                    start: star.span.start,
+                    end: inner.span().end,
+                };
+                return Ok(TypeExpr::Pointer(Box::new(inner), span));
+            }
+        
         if self.match_token(TokenKind::LeftBracket) {
             let bracket_token = self.previous();
 
@@ -1037,22 +1049,22 @@ impl Parser {
             }
 
             TokenKind::LeftBracket => {
-            let mut elements = vec![];
-            while !self.check(TokenKind::RightBracket) {
-                elements.push(self.expression()?);
-                if !self.match_token(TokenKind::Comma) { break; }
-            }
-            let close = self.consume_expected(TokenKind::RightBracket, "']'")?;
-            
-            let span = Span {
-                line: token.span.line,
-                col: token.span.col,
-                start: token.span.start,
-                end: close.span.end,
-            };
+                let mut elements = vec![];
+                while !self.check(TokenKind::RightBracket) {
+                    elements.push(self.expression()?);
+                    if !self.match_token(TokenKind::Comma) { break; }
+                }
+                let close = self.consume_expected(TokenKind::RightBracket, "']'")?;
+                
+                let span = Span {
+                    line: token.span.line,
+                    col: token.span.col,
+                    start: token.span.start,
+                    end: close.span.end,
+                };
 
-            Ok(Expr::ArrayLiteral(elements, span))
-        }
+                Ok(Expr::ArrayLiteral(elements, span))
+            }
 
             TokenKind::Equal | TokenKind::Bang => {
                 Err(self.error_at(&token, &format!("Syntax Error: Leading mathematical logic operator '{}' cannot begin an evaluation expression.", token.lexeme)))
