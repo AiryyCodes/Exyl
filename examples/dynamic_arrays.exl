@@ -1,0 +1,43 @@
+extern fun printf(fmt: string, ...): i32;
+extern fun malloc(size: i64): *u8;
+extern fun free(ptr: *u8): void;
+
+struct Array<T> {
+    data: *T,
+    len: i32,
+    cap: i32,
+}
+
+impl Array<T> {
+    fun new(): Array<T> {
+        let data = malloc(64) as *T;
+        return Array<T> { data: data, len: 0, cap: 16 };
+    }
+
+    fun push(self, value: T): void {
+        *(self.data + self.len) = value;
+        self.len = self.len + 1;
+    }
+
+    fun get(self, index: i32): T {
+        return *(self.data + index);
+    }
+
+    fun len(self): i32 {
+        return self.len;
+    }
+}
+
+fun main(): i32 {
+    let arr = Array<i32>::new();
+    arr.push(10);
+    arr.push(20);
+    arr.push(30);
+
+    printf("len: %d\n", arr.len());
+    printf("arr[0]: %d\n", arr.get(0));
+    printf("arr[1]: %d\n", arr.get(1));
+    printf("arr[2]: %d\n", arr.get(2));
+
+    return 0;
+}

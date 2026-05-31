@@ -1098,7 +1098,7 @@ impl SemanticAnalyzer {
                 let mangled_method = format!("{}___{}", mangled_struct, method);
 
                 match self.environment.lookup(&mangled_method) {
-                    Some(Symbol::Function { params, return_type, is_variadic }) => {
+                    Some(Symbol::Function { params, return_type, .. }) => {
                         let mut typed_args = vec![];
                         for (i, arg) in arguments.iter().enumerate() {
                             let hint = params.get(i).map(|(_, t)| t);
